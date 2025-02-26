@@ -66,7 +66,7 @@ impl Resp {
             Self::Array(arr) => {
                 let len = arr.len().to_string().len();
                 arr.iter()
-                    .fold(len + (CRLF_BYTES.len() * 2), |mut acc, cur| {
+                    .fold(1 + len + (CRLF_BYTES.len() * 2), |mut acc, cur| {
                         acc += cur.size();
                         acc
                     })

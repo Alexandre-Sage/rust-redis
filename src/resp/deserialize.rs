@@ -1,5 +1,5 @@
 use super::{
-    helpers::{find_crlf, parse_resp_item_len},
+    helpers::{check_prefix, find_crlf, is_valid_utf8, parse_resp_item_len},
     r#const::{
         ARRAY_PREFIX, BULK_STRING_PREFIX, CRLF_BYTES, SIMPLE_ERROR_PREFIX, SIMPLE_STRING_PREFIX,
     },
@@ -15,53 +15,32 @@ pub enum DeserializeError {
 }
 
 pub fn deserialize_resp_simple_string(simple_string: &[u8]) -> Result<Resp, DeserializeError> {
-    if !matches!(simple_string[0], SIMPLE_STRING_PREFIX) {
-        return Err(DeserializeError::InvalidPrefix);
-    }
-    match simple_string.windows(2).position(|w| w == CRLF_BYTES) {
-        Some(pos) => {
-            let simple_string = &simple_string[1..pos];
-            if std::str::from_utf8(simple_string).is_err() {
-                return Err(DeserializeError::InvalidUtf8);
-            }
-            Ok(Resp::SimpleString(simple_string.to_owned()))
-        }
-        None => Err(DeserializeError::InvalidCRLF),
-    }
+    check_prefix(&simple_string, SIMPLE_STRING_PREFIX)?;
+    let crlf = find_crlf(&simple_string)?;
+    let simple_string = &simple_string[1..crlf];
+    is_valid_utf8(simple_string)?;
+    Ok(Resp::SimpleString(simple_string.to_owned()))
 }
 
 pub(super) fn deserialize_resp_simple_error(simple_error: &[u8]) -> Result<Resp, DeserializeError> {
-    if !matches!(simple_error[0], SIMPLE_ERROR_PREFIX) {
-        return Err(DeserializeError::InvalidPrefix);
-    }
+    check_prefix(simple_error, SIMPLE_ERROR_PREFIX)?;
     let crlf = find_crlf(simple_error)?;
     let simple_error = &simple_error[1..crlf];
-    if std::str::from_utf8(simple_error).is_err() {
-        return Err(DeserializeError::InvalidUtf8);
-    }
+    is_valid_utf8(simple_error)?;
     Ok(Resp::SimpleError(simple_error.to_owned()))
 }
 
 pub fn deserialize_resp_bulk_string(bulk_string: &[u8]) -> Result<Resp, DeserializeError> {
-    if !matches!(bulk_string[0], BULK_STRING_PREFIX) {
-        return Err(DeserializeError::InvalidPrefix);
-    }
-    let crlf_pos = bulk_string
-        .windows(2)
-        .position(|w| w == CRLF_BYTES)
-        .ok_or(DeserializeError::InvalidCRLF)?;
-    let _length = std::str::from_utf8(&bulk_string[1..crlf_pos])
-        .map(|length| length.parse::<usize>())
-        .map_err(|_| DeserializeError::InvalidLength)?;
+    check_prefix(bulk_string, BULK_STRING_PREFIX)?;
+    let crlf_pos = find_crlf(bulk_string)?;
     let bulk_start = crlf_pos + 2;
     let bulk_string = &bulk_string[bulk_start..];
-    match bulk_string.windows(2).position(|w| w == CRLF_BYTES) {
-        Some(pos) => Ok(Resp::BulkString(bulk_string[..pos].to_owned())),
-        None => Err(DeserializeError::InvalidCRLF),
-    }
+    let crlf_pos = find_crlf(bulk_string)?;
+    Ok(Resp::BulkString(bulk_string[..crlf_pos].to_owned()))
 }
 
 pub fn deserialize_resp_array(arr: &[u8]) -> Result<Resp, DeserializeError> {
+    check_prefix(arr, ARRAY_PREFIX)?;
     let crlf_len = CRLF_BYTES.len();
     let first_crlf = find_crlf(arr)?;
     let arr_len = parse_resp_item_len(&arr[1..first_crlf])?;
@@ -70,9 +49,6 @@ pub fn deserialize_resp_array(arr: &[u8]) -> Result<Resp, DeserializeError> {
     let mut parsed_item = 0;
     while current_pos < arr.len() && parsed_item < arr_len {
         let current = &arr[current_pos..];
-        dbg!(String::from_utf8_lossy(current));
-        dbg!(&current_pos, arr.len());
-        dbg!(&buf);
         match current[0] {
             BULK_STRING_PREFIX => {
                 let item_first_crlf_pos = find_crlf(current)?;
@@ -92,16 +68,12 @@ pub fn deserialize_resp_array(arr: &[u8]) -> Result<Resp, DeserializeError> {
                 current_pos += item.len();
             }
             ARRAY_PREFIX => {
-                let item_first_crlf_pos = find_crlf(current)?;
-                let item_len = parse_resp_item_len(&current[1..item_first_crlf_pos])?;
                 let item = Resp::deserialize(current)?;
-                current_pos += item.size() + 1;
+                current_pos += item.size();
                 buf.push(item);
                 parsed_item += 1;
             }
             _any => {
-                dbg!();
-                dbg!(&buf);
                 todo!()
             }
         }
