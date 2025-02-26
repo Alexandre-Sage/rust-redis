@@ -14,7 +14,7 @@ pub enum DeserializeError {
     InvalidLength,
 }
 
-pub fn deserialize_simple_string(simple_string: &[u8]) -> Result<Resp, DeserializeError> {
+pub(super) fn deserialize_simple_string(simple_string: &[u8]) -> Result<Resp, DeserializeError> {
     check_prefix(&simple_string, SIMPLE_STRING_PREFIX)?;
     let crlf = find_crlf(&simple_string)?;
     let simple_string = &simple_string[1..crlf];
@@ -30,7 +30,7 @@ pub(super) fn deserialize_simple_error(simple_error: &[u8]) -> Result<Resp, Dese
     Ok(Resp::SimpleError(simple_error.to_owned()))
 }
 
-pub fn deserialize_bulk_string(bulk_string: &[u8]) -> Result<Resp, DeserializeError> {
+pub(super) fn deserialize_bulk_string(bulk_string: &[u8]) -> Result<Resp, DeserializeError> {
     check_prefix(bulk_string, BULK_STRING_PREFIX)?;
     let crlf_pos = find_crlf(bulk_string)?;
     let bulk_start = crlf_pos + 2;
@@ -39,7 +39,7 @@ pub fn deserialize_bulk_string(bulk_string: &[u8]) -> Result<Resp, DeserializeEr
     Ok(Resp::BulkString(bulk_string[..crlf_pos].to_owned()))
 }
 
-pub fn deserialize_array(arr: &[u8]) -> Result<Resp, DeserializeError> {
+pub(super) fn deserialize_array(arr: &[u8]) -> Result<Resp, DeserializeError> {
     check_prefix(arr, ARRAY_PREFIX)?;
     let crlf_len = CRLF_BYTES.len();
     let first_crlf = find_crlf(arr)?;
