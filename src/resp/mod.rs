@@ -1,13 +1,13 @@
 use deserialize::{
-    deserialize_resp_array, deserialize_resp_bulk_string, deserialize_resp_simple_error,
-    deserialize_resp_simple_string, DeserializeError,
+    deserialize_array, deserialize_bulk_string, deserialize_simple_error,
+    deserialize_simple_string, DeserializeError,
 };
 use r#const::{
     ARRAY_PREFIX, BULK_STRING_PREFIX, CRLF_BYTES, SIMPLE_ERROR_PREFIX, SIMPLE_STRING_PREFIX,
 };
 use serialize::{
-    serialize_resp_array, serialize_resp_bulk_string, serialize_resp_error,
-    serialize_resp_simple_string, SerializeError,
+    serialize_array, serialize_bulk_string, serialize_simple_error, serialize_simple_string,
+    SerializeError,
 };
 
 mod r#const;
@@ -26,19 +26,19 @@ pub enum Resp {
 impl Resp {
     pub fn serialize(self) -> Result<Vec<u8>, SerializeError> {
         match self {
-            Resp::BulkString(bulk) => serialize_resp_bulk_string(&bulk),
-            Resp::SimpleString(simple) => serialize_resp_simple_string(&simple),
-            Resp::Array(array) => serialize_resp_array(array),
-            Resp::SimpleError(error) => serialize_resp_error(&error),
+            Resp::BulkString(bulk) => serialize_bulk_string(&bulk),
+            Resp::SimpleString(simple) => serialize_simple_string(&simple),
+            Resp::Array(array) => serialize_array(array),
+            Resp::SimpleError(error) => serialize_simple_error(&error),
         }
     }
 
     pub fn deserialize(input: &[u8]) -> Result<Resp, DeserializeError> {
         match input[0] {
-            SIMPLE_STRING_PREFIX => deserialize_resp_simple_string(input),
-            BULK_STRING_PREFIX => deserialize_resp_bulk_string(input),
-            ARRAY_PREFIX => deserialize_resp_array(input),
-            SIMPLE_ERROR_PREFIX => deserialize_resp_simple_error(input),
+            SIMPLE_STRING_PREFIX => deserialize_simple_string(input),
+            BULK_STRING_PREFIX => deserialize_bulk_string(input),
+            ARRAY_PREFIX => deserialize_array(input),
+            SIMPLE_ERROR_PREFIX => deserialize_simple_error(input),
             _any => {
                 //dbg!(&_any);
                 todo!()

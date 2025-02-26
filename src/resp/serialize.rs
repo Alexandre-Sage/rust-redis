@@ -10,7 +10,7 @@ pub enum SerializeError {
     InvaliUtf8,
 }
 
-pub fn serialize_resp_simple_string(simple_string: &[u8]) -> Result<Vec<u8>, SerializeError> {
+pub fn serialize_simple_string(simple_string: &[u8]) -> Result<Vec<u8>, SerializeError> {
     if std::str::from_utf8(simple_string).is_err() {
         return Err(SerializeError::InvaliUtf8);
     }
@@ -22,7 +22,7 @@ pub fn serialize_resp_simple_string(simple_string: &[u8]) -> Result<Vec<u8>, Ser
     Ok(buf)
 }
 
-pub fn serialize_resp_bulk_string(bulk_string: &[u8]) -> Result<Vec<u8>, SerializeError> {
+pub fn serialize_bulk_string(bulk_string: &[u8]) -> Result<Vec<u8>, SerializeError> {
     let length = bulk_string.len();
     let length_string = length.to_string();
     let mut buf = Vec::with_capacity(length + (CRLF_BYTES.len() * 2) + length_string.len() + 1);
@@ -34,7 +34,7 @@ pub fn serialize_resp_bulk_string(bulk_string: &[u8]) -> Result<Vec<u8>, Seriali
     Ok(buf)
 }
 
-pub fn serialize_resp_array(input: Vec<Resp>) -> Result<Vec<u8>, SerializeError> {
+pub fn serialize_array(input: Vec<Resp>) -> Result<Vec<u8>, SerializeError> {
     let mut buf = Vec::new();
     let length = input.len();
     let length_string = length.to_string();
@@ -47,7 +47,7 @@ pub fn serialize_resp_array(input: Vec<Resp>) -> Result<Vec<u8>, SerializeError>
     }
     Ok(buf)
 }
-pub fn serialize_resp_error(error: &[u8]) -> Result<Vec<u8>, SerializeError> {
+pub fn serialize_simple_error(error: &[u8]) -> Result<Vec<u8>, SerializeError> {
     if std::str::from_utf8(error).is_err() {
         return Err(SerializeError::InvaliUtf8);
     }
@@ -67,14 +67,14 @@ mod test {
     fn should_serialize_bulk_string() {
         const EXPECT: &[u8] = b"$5\r\nhello\r\n";
         const INPUT: &[u8] = b"hello";
-        let result = serialize_resp_bulk_string(INPUT).unwrap();
+        let result = serialize_bulk_string(INPUT).unwrap();
         assert_eq!(result, EXPECT)
     }
     #[test]
     fn should_serialize_simple_string() {
         const EXPECT: &[u8] = b"+hello\r\n";
         const INPUT: &[u8] = b"hello";
-        let result = serialize_resp_simple_string(INPUT).unwrap();
+        let result = serialize_simple_string(INPUT).unwrap();
         assert_eq!(result, EXPECT)
     }
 
@@ -85,7 +85,7 @@ mod test {
             Resp::BulkString(b"hello".to_vec()),
             Resp::BulkString(b"world".to_vec()),
         ];
-        let result = serialize_resp_array(input).unwrap();
+        let result = serialize_array(input).unwrap();
         assert_eq!(result, EXPECT)
     }
     #[test]
@@ -93,7 +93,7 @@ mod test {
         const EXPECT: &[u8] =
             b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n";
         const INPUT: &[u8] = b"WRONGTYPE Operation against a key holding the wrong kind of value";
-        let result: Result<Vec<u8>, SerializeError> = serialize_resp_error(INPUT);
+        let result: Result<Vec<u8>, SerializeError> = serialize_simple_error(INPUT);
         assert_eq!(result.unwrap(), EXPECT)
     }
 }

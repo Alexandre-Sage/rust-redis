@@ -1,6 +1,6 @@
 mod resp;
 
-use resp::{serialize::serialize_resp_simple_string, Resp};
+use resp::{serialize::serialize_simple_string, Resp};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,

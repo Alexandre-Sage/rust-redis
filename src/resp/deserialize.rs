@@ -14,7 +14,7 @@ pub enum DeserializeError {
     InvalidLength,
 }
 
-pub fn deserialize_resp_simple_string(simple_string: &[u8]) -> Result<Resp, DeserializeError> {
+pub fn deserialize_simple_string(simple_string: &[u8]) -> Result<Resp, DeserializeError> {
     check_prefix(&simple_string, SIMPLE_STRING_PREFIX)?;
     let crlf = find_crlf(&simple_string)?;
     let simple_string = &simple_string[1..crlf];
@@ -22,7 +22,7 @@ pub fn deserialize_resp_simple_string(simple_string: &[u8]) -> Result<Resp, Dese
     Ok(Resp::SimpleString(simple_string.to_owned()))
 }
 
-pub(super) fn deserialize_resp_simple_error(simple_error: &[u8]) -> Result<Resp, DeserializeError> {
+pub(super) fn deserialize_simple_error(simple_error: &[u8]) -> Result<Resp, DeserializeError> {
     check_prefix(simple_error, SIMPLE_ERROR_PREFIX)?;
     let crlf = find_crlf(simple_error)?;
     let simple_error = &simple_error[1..crlf];
@@ -30,7 +30,7 @@ pub(super) fn deserialize_resp_simple_error(simple_error: &[u8]) -> Result<Resp,
     Ok(Resp::SimpleError(simple_error.to_owned()))
 }
 
-pub fn deserialize_resp_bulk_string(bulk_string: &[u8]) -> Result<Resp, DeserializeError> {
+pub fn deserialize_bulk_string(bulk_string: &[u8]) -> Result<Resp, DeserializeError> {
     check_prefix(bulk_string, BULK_STRING_PREFIX)?;
     let crlf_pos = find_crlf(bulk_string)?;
     let bulk_start = crlf_pos + 2;
@@ -39,7 +39,7 @@ pub fn deserialize_resp_bulk_string(bulk_string: &[u8]) -> Result<Resp, Deserial
     Ok(Resp::BulkString(bulk_string[..crlf_pos].to_owned()))
 }
 
-pub fn deserialize_resp_array(arr: &[u8]) -> Result<Resp, DeserializeError> {
+pub fn deserialize_array(arr: &[u8]) -> Result<Resp, DeserializeError> {
     check_prefix(arr, ARRAY_PREFIX)?;
     let crlf_len = CRLF_BYTES.len();
     let first_crlf = find_crlf(arr)?;
@@ -89,7 +89,7 @@ mod test {
     fn should_deserialize_bulk_string() {
         const INPUT: &[u8] = b"$5\r\nhello\r\n";
         const EXPECT: &[u8] = b"hello";
-        let result = deserialize_resp_bulk_string(INPUT).unwrap();
+        let result = deserialize_bulk_string(INPUT).unwrap();
         assert_eq!(result, Resp::BulkString(EXPECT.to_owned()))
     }
 
@@ -97,7 +97,7 @@ mod test {
     fn should_deserilaize_simple_string() {
         const INPUT: &[u8] = b"+hello\r\n";
         const EXPECT: &[u8] = b"hello";
-        let result = deserialize_resp_simple_string(INPUT).unwrap();
+        let result = deserialize_simple_string(INPUT).unwrap();
         assert_eq!(result, Resp::SimpleString(EXPECT.to_owned()))
     }
 
@@ -106,7 +106,7 @@ mod test {
         const EXPECT: &[u8] = b"WRONGTYPE Operation against a key holding the wrong kind of value";
         const INPUT: &[u8] =
             b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n";
-        let result: Result<Resp, DeserializeError> = deserialize_resp_simple_error(INPUT);
+        let result: Result<Resp, DeserializeError> = deserialize_simple_error(INPUT);
         assert_eq!(result.unwrap(), Resp::SimpleError(EXPECT.to_owned()))
     }
 
@@ -117,7 +117,7 @@ mod test {
             Resp::BulkString(b"hello".to_vec()),
             Resp::BulkString(b"world".to_vec()),
         ];
-        let result = deserialize_resp_array(INPUT);
+        let result = deserialize_array(INPUT);
         assert_eq!(result.unwrap(), Resp::Array(expect))
     }
 
@@ -129,7 +129,7 @@ mod test {
             Resp::BulkString(b"world".to_vec()),
             Resp::SimpleString(b"PONG".to_vec()),
         ];
-        let result = deserialize_resp_array(INPUT);
+        let result = deserialize_array(INPUT);
         assert_eq!(result.unwrap(), Resp::Array(expect))
     }
 
@@ -141,7 +141,7 @@ mod test {
             Resp::BulkString(b"world".to_vec()),
             Resp::SimpleString(b"PONG".to_vec()),
         ])];
-        let result = deserialize_resp_array(INPUT);
+        let result = deserialize_array(INPUT);
         assert_eq!(result.unwrap(), Resp::Array(expect))
     }
 
@@ -158,7 +158,7 @@ mod test {
                 Resp::SimpleString(b"PONG".to_vec()),
             ]),
         ];
-        let result = deserialize_resp_array(INPUT);
+        let result = deserialize_array(INPUT);
         assert_eq!(result.unwrap(), Resp::Array(expect))
     }
 
@@ -177,7 +177,7 @@ mod test {
             Resp::BulkString(b"hello".to_vec()),
             Resp::BulkString(b"world".to_vec()),
         ];
-        let result = deserialize_resp_array(INPUT);
+        let result = deserialize_array(INPUT);
         assert_eq!(result.unwrap(), Resp::Array(expect))
     }
 }
