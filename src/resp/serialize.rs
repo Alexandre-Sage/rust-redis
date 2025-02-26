@@ -10,7 +10,7 @@ pub enum SerializeError {
     InvaliUtf8,
 }
 
-pub fn serialize_simple_string(simple_string: &[u8]) -> Result<Vec<u8>, SerializeError> {
+pub(super) fn serialize_simple_string(simple_string: &[u8]) -> Result<Vec<u8>, SerializeError> {
     if std::str::from_utf8(simple_string).is_err() {
         return Err(SerializeError::InvaliUtf8);
     }
@@ -22,7 +22,7 @@ pub fn serialize_simple_string(simple_string: &[u8]) -> Result<Vec<u8>, Serializ
     Ok(buf)
 }
 
-pub fn serialize_bulk_string(bulk_string: &[u8]) -> Result<Vec<u8>, SerializeError> {
+pub(super) fn serialize_bulk_string(bulk_string: &[u8]) -> Result<Vec<u8>, SerializeError> {
     let length = bulk_string.len();
     let length_string = length.to_string();
     let mut buf = Vec::with_capacity(length + (CRLF_BYTES.len() * 2) + length_string.len() + 1);
@@ -34,7 +34,7 @@ pub fn serialize_bulk_string(bulk_string: &[u8]) -> Result<Vec<u8>, SerializeErr
     Ok(buf)
 }
 
-pub fn serialize_array(input: Vec<Resp>) -> Result<Vec<u8>, SerializeError> {
+pub(super) fn serialize_array(input: Vec<Resp>) -> Result<Vec<u8>, SerializeError> {
     let mut buf = Vec::new();
     let length = input.len();
     let length_string = length.to_string();
@@ -47,7 +47,7 @@ pub fn serialize_array(input: Vec<Resp>) -> Result<Vec<u8>, SerializeError> {
     }
     Ok(buf)
 }
-pub fn serialize_simple_error(error: &[u8]) -> Result<Vec<u8>, SerializeError> {
+pub(super) fn serialize_simple_error(error: &[u8]) -> Result<Vec<u8>, SerializeError> {
     if std::str::from_utf8(error).is_err() {
         return Err(SerializeError::InvaliUtf8);
     }
