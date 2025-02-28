@@ -1,26 +1,32 @@
 use deserialize::{
-    deserialize_array, deserialize_bulk_string, deserialize_simple_error,
-    deserialize_simple_string, DeserializeError,
+    deserialize_array, deserialize_bulk_string, deserialize_integer, deserialize_simple_error,
+    deserialize_simple_string,
 };
+use errors::{DeserializeError, SerializeError};
 use r#const::{
-    ARRAY_PREFIX, BULK_STRING_PREFIX, CRLF_BYTES, SIMPLE_ERROR_PREFIX, SIMPLE_STRING_PREFIX,
+    ARRAY_PREFIX, BULK_STRING_PREFIX, CRLF_BYTES, INTEGERS_PREFIX, SIMPLE_ERROR_PREFIX,
+    SIMPLE_STRING_PREFIX,
 };
 use serialize::{
-    serialize_array, serialize_bulk_string, serialize_simple_error, serialize_simple_string,
-    SerializeError,
+    serialize_array, serialize_bulk_string, serialize_integer, serialize_simple_error,
+    serialize_simple_string,
 };
+
+use crate::ternary_expr;
 
 mod r#const;
 mod deserialize;
+pub mod errors;
 mod helpers;
 pub mod serialize;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Resp {
     SimpleString(Vec<u8>),
     SimpleError(Vec<u8>),
     BulkString(Vec<u8>),
     Array(Vec<Resp>),
+    Integers(i64),
 }
 
 impl Resp {
@@ -30,6 +36,7 @@ impl Resp {
             Resp::SimpleString(simple) => serialize_simple_string(&simple),
             Resp::Array(array) => serialize_array(array),
             Resp::SimpleError(error) => serialize_simple_error(&error),
+            Resp::Integers(int) => serialize_integer(int),
         }
     }
 
@@ -39,6 +46,7 @@ impl Resp {
             BULK_STRING_PREFIX => deserialize_bulk_string(input),
             ARRAY_PREFIX => deserialize_array(input),
             SIMPLE_ERROR_PREFIX => deserialize_simple_error(input),
+            INTEGERS_PREFIX => deserialize_integer(input),
             _any => {
                 //dbg!(&_any);
                 todo!()
@@ -46,12 +54,21 @@ impl Resp {
         }
     }
 
-    pub fn bulk_from_str(value: &str) -> Self {
+    pub fn bulk_string_from_str(value: &str) -> Self {
         Self::BulkString(value.into())
     }
 
     pub fn simple_string_from_str(value: &str) -> Self {
         Self::SimpleString(value.into())
+    }
+
+    pub fn as_str(&self) -> Result<&str, ()> {
+        match self {
+            Resp::BulkString(bulk) => Ok(std::str::from_utf8(bulk).unwrap()),
+            Resp::SimpleString(simple_string) => Ok(std::str::from_utf8(&simple_string).unwrap()),
+            //Resp::Integers(int) => Ok(std::str::from_utf8(int.to_string().as_bytes()).unwrap()),
+            _ => Err(()),
+        }
     }
 
     pub fn size(&self) -> usize {
@@ -61,15 +78,20 @@ impl Resp {
             }
             Self::BulkString(string) => {
                 let len = string.len();
-                len + len.to_string().len() + (CRLF_BYTES.len() * 2)
+                1 + len + len.to_string().len() + (CRLF_BYTES.len() * 2)
             }
             Self::Array(arr) => {
                 let len = arr.len().to_string().len();
                 arr.iter()
-                    .fold(1 + len + (CRLF_BYTES.len() * 2), |mut acc, cur| {
+                    .fold(1 + len + (CRLF_BYTES.len()), |mut acc, cur| {
                         acc += cur.size();
                         acc
                     })
+            }
+            Self::Integers(int) => {
+                let header_len = ternary_expr!(*int < 0, 2, 1);
+                let len = int.to_string().len();
+                header_len + len + CRLF_BYTES.len()
             }
         }
     }

@@ -1,4 +1,7 @@
+use crate::resp::r#const::INTEGERS_PREFIX;
+
 use super::{
+    errors::DeserializeError,
     helpers::{check_prefix, find_crlf, is_valid_utf8, parse_resp_item_len},
     r#const::{
         ARRAY_PREFIX, BULK_STRING_PREFIX, CRLF_BYTES, SIMPLE_ERROR_PREFIX, SIMPLE_STRING_PREFIX,
@@ -6,17 +9,9 @@ use super::{
     Resp,
 };
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum DeserializeError {
-    InvalidPrefix,
-    InvalidCRLF,
-    InvalidUtf8,
-    InvalidLength,
-}
-
 pub(super) fn deserialize_simple_string(simple_string: &[u8]) -> Result<Resp, DeserializeError> {
     check_prefix(&simple_string, SIMPLE_STRING_PREFIX)?;
-    let crlf = find_crlf(&simple_string)?;
+    let crlf = find_crlf(simple_string)?;
     let simple_string = &simple_string[1..crlf];
     is_valid_utf8(simple_string)?;
     Ok(Resp::SimpleString(simple_string.to_owned()))
@@ -82,6 +77,17 @@ pub(super) fn deserialize_array(arr: &[u8]) -> Result<Resp, DeserializeError> {
     Ok(Resp::Array(buf))
 }
 
+pub(super) fn deserialize_integer(input: &[u8]) -> Result<Resp, DeserializeError> {
+    check_prefix(input, INTEGERS_PREFIX)?;
+    let crlf = find_crlf(input)?;
+    let integer = &input[1..crlf];
+    is_valid_utf8(integer)?;
+    let integer = std::str::from_utf8(integer).unwrap();
+    let integer = integer
+        .parse()
+        .map_err(|err| DeserializeError::InvalidInteger)?;
+    Ok(Resp::Integers(integer))
+}
 #[cfg(test)]
 mod test {
     use super::*;
@@ -179,5 +185,20 @@ mod test {
         ];
         let result = deserialize_array(INPUT);
         assert_eq!(result.unwrap(), Resp::Array(expect))
+    }
+    #[test]
+    fn should_deserialize_integer() {
+        const INPUT: &[u8] = b":1000\r\n";
+        const EXPECT: i64 = 1000;
+        let result: Result<Resp, DeserializeError> = deserialize_integer(INPUT);
+        assert_eq!(result.unwrap(), Resp::Integers(EXPECT))
+    }
+
+    #[test]
+    fn should_deserialize_negative_integer() {
+        const INPUT: &[u8] = b":-1000\r\n";
+        const EXPECT: i64 = -1000;
+        let result: Result<Resp, DeserializeError> = deserialize_integer(INPUT);
+        assert_eq!(result.unwrap(), Resp::Integers(EXPECT))
     }
 }

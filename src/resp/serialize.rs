@@ -1,14 +1,13 @@
+use crate::ternary_expr;
+
 use super::{
+    errors::SerializeError,
     r#const::{
-        ARRAY_PREFIX, BULK_STRING_PREFIX, CRLF_BYTES, SIMPLE_ERROR_PREFIX, SIMPLE_STRING_PREFIX,
+        ARRAY_PREFIX, BULK_STRING_PREFIX, CRLF_BYTES, INTEGERS_PREFIX, SIMPLE_ERROR_PREFIX,
+        SIMPLE_STRING_PREFIX,
     },
     Resp,
 };
-
-#[derive(Debug)]
-pub enum SerializeError {
-    InvaliUtf8,
-}
 
 pub(super) fn serialize_simple_string(simple_string: &[u8]) -> Result<Vec<u8>, SerializeError> {
     if std::str::from_utf8(simple_string).is_err() {
@@ -59,6 +58,17 @@ pub(super) fn serialize_simple_error(error: &[u8]) -> Result<Vec<u8>, SerializeE
     Ok(buf)
 }
 
+pub(super) fn serialize_integer(int: i64) -> Result<Vec<u8>, SerializeError> {
+    let header = ternary_expr!(int < 0, 2, 1);
+    let integer_string = int.to_string();
+    let len = integer_string.len();
+    let mut buf = Vec::with_capacity(header + len + CRLF_BYTES.len());
+    buf.push(INTEGERS_PREFIX);
+    buf.extend_from_slice(integer_string.as_bytes());
+    buf.extend_from_slice(CRLF_BYTES);
+    Ok(buf)
+}
+
 #[cfg(test)]
 mod test {
 
@@ -94,6 +104,20 @@ mod test {
             b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n";
         const INPUT: &[u8] = b"WRONGTYPE Operation against a key holding the wrong kind of value";
         let result: Result<Vec<u8>, SerializeError> = serialize_simple_error(INPUT);
+        assert_eq!(result.unwrap(), EXPECT)
+    }
+    #[test]
+    fn should_serialize_integer() {
+        const INPUT: i64 = 1000;
+        const EXPECT: &[u8] = b":1000\r\n";
+        let result: Result<Vec<u8>, SerializeError> = serialize_integer(INPUT);
+        assert_eq!(result.unwrap(), EXPECT)
+    }
+    #[test]
+    fn should_serialize_negative_integer() {
+        const INPUT: i64 = -1000;
+        const EXPECT: &[u8] = b":-1000\r\n";
+        let result: Result<Vec<u8>, SerializeError> = serialize_integer(INPUT);
         assert_eq!(result.unwrap(), EXPECT)
     }
 }

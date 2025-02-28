@@ -1,6 +1,15 @@
+pub mod commands;
+pub mod helpers;
 mod resp;
 
-use resp::{serialize::serialize_simple_string, Resp};
+use std::sync::Arc;
+
+use commands::{
+    command_registry::{self, CommandRegistry},
+    echo::EchoCommand,
+    ping::PingCommand,
+};
+use resp::{errors::DeserializeError, Resp};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -11,19 +20,26 @@ use tokio::{
 struct RustRedis {
     port: i32,
     host: String,
+    command_registry: Arc<CommandRegistry>,
 }
 impl Default for RustRedis {
     fn default() -> Self {
-        Self {
-            host: "127.0.0.1".to_string(),
-            port: 6379,
-        }
+        let host = "127.0.0.1".to_string();
+        let port = 6379;
+        Self::new(port, host)
     }
 }
 
 impl RustRedis {
     fn new(port: i32, host: String) -> Self {
-        Self { port, host }
+        let mut command_registry = CommandRegistry::new();
+        command_registry.register("ECHO", Box::new(EchoCommand));
+        command_registry.register("PING", Box::new(PingCommand));
+        Self {
+            port,
+            host,
+            command_registry: command_registry.into(),
+        }
     }
     pub fn address(&self) -> String {
         format!("{}:{}", self.host, self.port)
@@ -38,6 +54,7 @@ impl RustRedis {
         loop {
             match listener.accept().await {
                 Ok((mut stream, _)) => {
+                    let command_registry = self.command_registry.clone();
                     tokio::spawn(async move {
                         log::info!("Incoming request");
                         loop {
@@ -48,14 +65,38 @@ impl RustRedis {
                                     break;
                                 }
                                 Ok(size) => {
-                                    const PING_REGEX: &str = r"(?i)PING";
-                                    let ping = regex::Regex::new(PING_REGEX)
-                                        .expect("Cant create ping regex");
-                                    let buf_as_str =
-                                        std::str::from_utf8(&buf[..size]).expect("INVALID STRING");
-                                    for _cap in ping.find_iter(buf_as_str) {
-                                        let res = Resp::simple_string_from_str("PONG");
-                                        stream.write_all(&res.serialize().unwrap()).await.unwrap();
+                                    let commands = parse_commands(&buf[..size]).unwrap();
+                                    for command in commands {
+                                        if let Resp::Array(all_command) = command {
+                                            for command in all_command {
+                                                match command {
+                                                    Resp::BulkString(command) => {
+                                                        let command =
+                                                            std::str::from_utf8(&command).unwrap();
+                                                        let handler = command_registry
+                                                            .command_handler(command)
+                                                            .unwrap();
+                                                        let result = handler.handle(&[]).unwrap();
+                                                        let response = result.serialize().unwrap();
+                                                        stream.write_all(&response).await.unwrap();
+                                                    }
+                                                    Resp::Array(command_with_args) => {
+                                                        let command =
+                                                            command_with_args[0].as_str().unwrap();
+                                                        let handler = command_registry
+                                                            .command_handler(command)
+                                                            .unwrap();
+                                                        dbg!(&command_with_args);
+                                                        let result = handler
+                                                            .handle(&command_with_args[1..])
+                                                            .unwrap();
+                                                        let response = result.serialize().unwrap();
+                                                        stream.write_all(&response).await.unwrap();
+                                                    }
+                                                    _ => todo!(),
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                                 Err(_) => {
@@ -71,11 +112,32 @@ impl RustRedis {
     }
 }
 
+pub fn parse_commands(input: &[u8]) -> Result<Vec<Resp>, DeserializeError> {
+    let mut parsed = 0;
+    let mut commands = Vec::new();
+    while parsed < input.len() {
+        let cur = Resp::deserialize(&input[parsed..])?;
+        parsed += cur.size();
+        commands.push(cur);
+    }
+    Ok(commands)
+}
+
 #[tokio::main]
 async fn main() -> tokio::io::Result<()> {
     env_logger::init();
-    let runner = RustRedis::new(6379, "127.0.0.1".to_string());
-    runner.run(None).await
+    //let runner = RustRedis::new(6379, "127.0.0.1".to_string());
+    //runner.run(None).await
+    let t1 = b"*1\r\n$4\r\nPING\r\n*1\r\n$4\r\nPING\r\n";
+    let mut parsed = 0;
+    let mut command = Vec::new();
+    while parsed < t1.len() {
+        let cur = Resp::deserialize(&t1[parsed..]).unwrap();
+        parsed += cur.size();
+        command.push(cur);
+    }
+    println!("{:?}", command);
+    Ok(())
 }
 #[cfg(test)]
 mod test {
@@ -87,6 +149,7 @@ mod test {
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpStream,
     };
+    // *1\r\n$4\r\nPING\r\n
     async fn setup() -> TcpStream {
         let notif = Arc::new(Notify::new());
         let notif2 = notif.clone();
@@ -106,7 +169,7 @@ mod test {
     }
     #[tokio::test]
     async fn should_reply_to_ping() {
-        const INPUT: &str = "PING";
+        const INPUT: &str = "*1\r\n$4\r\nPING\r\n";
         const EXPECT: &str = "+PONG\r\n";
         let stream = setup().await;
         let buf = send_request(stream, INPUT).await;
@@ -115,7 +178,8 @@ mod test {
 
     #[tokio::test]
     async fn should_reply_to_multiple_ping() {
-        const INPUT: &str = "PING\nPING";
+        // *2\r\n$4\r\nPING\r\n$4\r\nPING\r\n
+        const INPUT: &str = "*2\r\n$4\r\nPING\r\n$4\r\nPING\r\n";
         const EXPECT: &str = "+PONG";
         let stream = setup().await;
         let buf = send_request(stream, INPUT).await;
@@ -129,7 +193,7 @@ mod test {
 
     #[tokio::test]
     async fn should_handle_concurent_connection() {
-        const INPUT: &str = "PING";
+        const INPUT: &str = "*1\r\n$4\r\nPING\r\n";
         const EXPECT: &str = "+PONG\r\n";
         const CLIENTS: usize = 6;
         tokio::spawn(async move {
@@ -155,5 +219,14 @@ mod test {
             let test = String::from_utf8_lossy(&res);
             assert_eq!(test, EXPECT);
         }
+    }
+    #[tokio::test]
+    async fn should_handle_echo_command() {
+        const EXPECT: &str = "$3\r\nhey\r\n";
+        const INPUT: &str = "*1\r\n*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n";
+        let stream = setup().await;
+        let res = send_request(stream, INPUT).await;
+        let res = std::str::from_utf8(&res).unwrap();
+        assert_eq!(res, EXPECT)
     }
 }

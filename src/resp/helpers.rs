@@ -1,6 +1,6 @@
 use std::path::Prefix;
 
-use super::{deserialize::DeserializeError, r#const::CRLF_BYTES};
+use super::{errors::DeserializeError, r#const::CRLF_BYTES};
 
 pub(super) fn find_crlf(data: &[u8]) -> Result<usize, DeserializeError> {
     data.windows(2)
