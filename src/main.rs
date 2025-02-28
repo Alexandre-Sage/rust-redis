@@ -4,11 +4,7 @@ mod resp;
 
 use std::sync::Arc;
 
-use commands::{
-    command_registry::{self, CommandRegistry},
-    echo::EchoCommand,
-    ping::PingCommand,
-};
+use commands::{command_registry::CommandRegistry, echo::EchoCommand, ping::PingCommand};
 use resp::{errors::DeserializeError, Resp};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -86,7 +82,6 @@ impl RustRedis {
                                                         let handler = command_registry
                                                             .command_handler(command)
                                                             .unwrap();
-                                                        dbg!(&command_with_args);
                                                         let result = handler
                                                             .handle(&command_with_args[1..])
                                                             .unwrap();
@@ -126,18 +121,8 @@ pub fn parse_commands(input: &[u8]) -> Result<Vec<Resp>, DeserializeError> {
 #[tokio::main]
 async fn main() -> tokio::io::Result<()> {
     env_logger::init();
-    //let runner = RustRedis::new(6379, "127.0.0.1".to_string());
-    //runner.run(None).await
-    let t1 = b"*1\r\n$4\r\nPING\r\n*1\r\n$4\r\nPING\r\n";
-    let mut parsed = 0;
-    let mut command = Vec::new();
-    while parsed < t1.len() {
-        let cur = Resp::deserialize(&t1[parsed..]).unwrap();
-        parsed += cur.size();
-        command.push(cur);
-    }
-    println!("{:?}", command);
-    Ok(())
+    let runner = RustRedis::new(6379, "127.0.0.1".to_string());
+    runner.run(None).await
 }
 #[cfg(test)]
 mod test {
