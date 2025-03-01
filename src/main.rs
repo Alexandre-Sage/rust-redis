@@ -1,11 +1,16 @@
 pub mod commands;
+pub mod errors;
 pub mod helpers;
 mod resp;
 
 use std::sync::Arc;
 
 use commands::{command_registry::CommandRegistry, echo::EchoCommand, ping::PingCommand};
-use resp::{errors::DeserializeError, Resp};
+use errors::{
+    resp::{DeserializeError, SerializeError},
+    RustRedisError,
+};
+use resp::Resp;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -29,7 +34,7 @@ impl Default for RustRedis {
 impl RustRedis {
     fn new(port: i32, host: String) -> Self {
         let mut command_registry = CommandRegistry::new();
-        command_registry.register("ECHO", Box::new(EchoCommand));
+        command_registry.register("ECHO", Box::new(EchoCommand::new()));
         command_registry.register("PING", Box::new(PingCommand));
         Self {
             port,
@@ -40,7 +45,7 @@ impl RustRedis {
     pub fn address(&self) -> String {
         format!("{}:{}", self.host, self.port)
     }
-    pub async fn run(&self, notify: Option<&Notify>) -> tokio::io::Result<()> {
+    pub async fn run(&self, notify: Option<&Notify>) -> Result<(), RustRedisError> {
         let addr = self.address();
         let listener = TcpListener::bind(&addr).await?;
         if let Some(notify) = notify {
@@ -63,34 +68,40 @@ impl RustRedis {
                                 Ok(size) => {
                                     let commands = parse_commands(&buf[..size]).unwrap();
                                     for command in commands {
-                                        if let Resp::Array(all_command) = command {
-                                            for command in all_command {
-                                                match command {
-                                                    Resp::BulkString(command) => {
-                                                        let command =
-                                                            std::str::from_utf8(&command).unwrap();
-                                                        let handler = command_registry
-                                                            .command_handler(command)
-                                                            .unwrap();
-                                                        let result = handler.handle(&[]).unwrap();
-                                                        let response = result.serialize().unwrap();
-                                                        stream.write_all(&response).await.unwrap();
+                                        match command {
+                                            Resp::Array(command_with_args) => {
+                                                if let Resp::BulkString(command) =
+                                                    &command_with_args[0]
+                                                {
+                                                    let command =
+                                                        std::str::from_utf8(&command).unwrap();
+                                                    let result = if command_with_args.len() == 1 {
+                                                        command_registry.no_args_command(command)
+                                                    } else {
+                                                        command_registry.command_with_args(
+                                                            command,
+                                                            &command_with_args[1..],
+                                                        )
                                                     }
-                                                    Resp::Array(command_with_args) => {
-                                                        let command =
-                                                            command_with_args[0].as_str().unwrap();
-                                                        let handler = command_registry
-                                                            .command_handler(command)
-                                                            .unwrap();
-                                                        let result = handler
-                                                            .handle(&command_with_args[1..])
-                                                            .unwrap();
-                                                        let response = result.serialize().unwrap();
-                                                        stream.write_all(&response).await.unwrap();
+                                                    .map(|res| res.serialize())
+                                                    .map_err(|err| {
+                                                        Into::<Resp>::into(err).serialize()
+                                                    });
+                                                    if let Ok(response) = result {
+                                                        match stream
+                                                            .write_all(&response.unwrap())
+                                                            .await
+                                                        {
+                                                            Ok(_) => (),
+                                                            Err(err) => {
+                                                                log::error!("{}", err.to_string());
+                                                                break;
+                                                            }
+                                                        }
                                                     }
-                                                    _ => todo!(),
                                                 }
                                             }
+                                            _ => todo!(),
                                         }
                                     }
                                 }
@@ -119,7 +130,7 @@ pub fn parse_commands(input: &[u8]) -> Result<Vec<Resp>, DeserializeError> {
 }
 
 #[tokio::main]
-async fn main() -> tokio::io::Result<()> {
+async fn main() -> Result<(), RustRedisError> {
     env_logger::init();
     let runner = RustRedis::new(6379, "127.0.0.1".to_string());
     runner.run(None).await
@@ -164,7 +175,7 @@ mod test {
     #[tokio::test]
     async fn should_reply_to_multiple_ping() {
         // *2\r\n$4\r\nPING\r\n$4\r\nPING\r\n
-        const INPUT: &str = "*2\r\n$4\r\nPING\r\n$4\r\nPING\r\n";
+        const INPUT: &str = "*1\r\n$4\r\nPING\r\n*1\r\n$4\r\nPING\r\n";
         const EXPECT: &str = "+PONG";
         let stream = setup().await;
         let buf = send_request(stream, INPUT).await;
@@ -208,7 +219,7 @@ mod test {
     #[tokio::test]
     async fn should_handle_echo_command() {
         const EXPECT: &str = "$3\r\nhey\r\n";
-        const INPUT: &str = "*1\r\n*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n";
+        const INPUT: &str = "*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n";
         let stream = setup().await;
         let res = send_request(stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();

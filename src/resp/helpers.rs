@@ -1,6 +1,6 @@
-use std::path::Prefix;
+use crate::errors::resp::DeserializeError;
 
-use super::{errors::DeserializeError, r#const::CRLF_BYTES};
+use super::r#const::CRLF_BYTES;
 
 pub(super) fn find_crlf(data: &[u8]) -> Result<usize, DeserializeError> {
     data.windows(2)

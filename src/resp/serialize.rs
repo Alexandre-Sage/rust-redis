@@ -1,7 +1,6 @@
-use crate::ternary_expr;
+use crate::{errors::resp::SerializeError, ternary_expr};
 
 use super::{
-    errors::SerializeError,
     r#const::{
         ARRAY_PREFIX, BULK_STRING_PREFIX, CRLF_BYTES, INTEGERS_PREFIX, SIMPLE_ERROR_PREFIX,
         SIMPLE_STRING_PREFIX,

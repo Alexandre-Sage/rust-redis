@@ -1,7 +1,6 @@
-use crate::resp::r#const::INTEGERS_PREFIX;
+use crate::{errors::resp::DeserializeError, resp::r#const::INTEGERS_PREFIX};
 
 use super::{
-    errors::DeserializeError,
     helpers::{check_prefix, find_crlf, is_valid_utf8, parse_resp_item_len},
     r#const::{
         ARRAY_PREFIX, BULK_STRING_PREFIX, CRLF_BYTES, SIMPLE_ERROR_PREFIX, SIMPLE_STRING_PREFIX,

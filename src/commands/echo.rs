@@ -1,13 +1,31 @@
+use crate::errors::RustRedisError;
+
 use super::command_registry::CommandHandler;
 
 #[derive(Debug)]
-pub struct EchoCommand;
+pub struct EchoCommand {
+    name: String,
+    args: String,
+}
+
+impl EchoCommand {
+    pub fn new() -> Self {
+        Self {
+            name: "echo".to_string(),
+            args: "1".to_string(),
+        }
+    }
+}
 
 impl CommandHandler for EchoCommand {
-    fn handle(&self, args: &[crate::resp::Resp]) -> Result<crate::resp::Resp, ()> {
+    fn handle(&self, args: &[crate::resp::Resp]) -> Result<crate::resp::Resp, RustRedisError> {
         dbg!(&args);
         if args.len() > 1 {
-            return Err(());
+            return Err(RustRedisError::InvalidArgLength(
+                self.name.clone(),
+                args.len().to_string(),
+                self.args.clone(),
+            ));
         }
         Ok(args[0].clone())
     }
@@ -21,13 +39,13 @@ mod test {
 
     #[test]
     fn should_reply_to_echo() {
-        let handler = EchoCommand;
+        let handler = EchoCommand::new();
         let result = handler.handle(&[Resp::BulkString(b"HELLO WORLD".to_vec())]);
         assert_eq!(result.unwrap(), Resp::BulkString(b"HELLO WORLD".to_vec()))
     }
     #[test]
     fn should_throw_error_for_invalid_arg_lenght() {
-        let handler = EchoCommand;
+        let handler = EchoCommand::new();
         let result = handler.handle(&[
             Resp::BulkString(b"HELLO WORLD".to_vec()),
             Resp::BulkString(b"HELLO WORLD".to_vec()),

@@ -2,7 +2,6 @@ use deserialize::{
     deserialize_array, deserialize_bulk_string, deserialize_integer, deserialize_simple_error,
     deserialize_simple_string,
 };
-use errors::{DeserializeError, SerializeError};
 use r#const::{
     ARRAY_PREFIX, BULK_STRING_PREFIX, CRLF_BYTES, INTEGERS_PREFIX, SIMPLE_ERROR_PREFIX,
     SIMPLE_STRING_PREFIX,
@@ -12,11 +11,13 @@ use serialize::{
     serialize_simple_string,
 };
 
-use crate::ternary_expr;
+use crate::{
+    errors::resp::{DeserializeError, SerializeError},
+    ternary_expr,
+};
 
 mod r#const;
 mod deserialize;
-pub mod errors;
 mod helpers;
 pub mod serialize;
 

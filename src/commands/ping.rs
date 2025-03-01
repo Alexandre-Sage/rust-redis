@@ -1,4 +1,4 @@
-use crate::resp::Resp;
+use crate::{errors::RustRedisError, resp::Resp};
 
 use super::command_registry::CommandHandler;
 
@@ -6,7 +6,7 @@ use super::command_registry::CommandHandler;
 pub struct PingCommand;
 
 impl CommandHandler for PingCommand {
-    fn handle(&self, _args: &[crate::resp::Resp]) -> Result<crate::resp::Resp, ()> {
+    fn handle(&self, _args: &[crate::resp::Resp]) -> Result<crate::resp::Resp, RustRedisError> {
         Ok(Resp::simple_string_from_str("PONG"))
     }
 }

@@ -2,15 +2,11 @@ use std::collections::HashMap;
 
 use mockall::automock;
 
-use crate::resp::Resp;
+use crate::{errors::RustRedisError, resp::Resp};
 
-#[derive(Debug)]
-pub enum CommandRegistryError {
-    CommandNotFound,
-}
 #[automock]
 pub trait CommandHandler: std::fmt::Debug + Send + Sync {
-    fn handle(&self, args: &[Resp]) -> Result<Resp, ()>;
+    fn handle(&self, args: &[Resp]) -> Result<Resp, RustRedisError>;
 }
 
 #[derive(Debug)]
@@ -28,13 +24,20 @@ impl CommandRegistry {
         self.registry.insert(arg.to_uppercase(), command_handler);
     }
 
-    pub fn command_handler(
-        &self,
-        arg: &str,
-    ) -> Result<&Box<dyn CommandHandler>, CommandRegistryError> {
+    pub fn command_handler(&self, arg: &str) -> Result<&Box<dyn CommandHandler>, RustRedisError> {
         self.registry
             .get(arg.to_uppercase().as_str())
-            .ok_or(CommandRegistryError::CommandNotFound)
+            .ok_or(RustRedisError::UnknownCommand(arg.to_owned()))
+    }
+
+    pub fn command_with_args(&self, command: &str, args: &[Resp]) -> Result<Resp, RustRedisError> {
+        let handler = self.command_handler(command)?;
+        handler.handle(args)
+    }
+
+    pub fn no_args_command(&self, command: &str) -> Result<Resp, RustRedisError> {
+        let handler = self.command_handler(command)?;
+        handler.handle(&[])
     }
 }
 
