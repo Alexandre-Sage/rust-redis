@@ -40,8 +40,8 @@ pub(super) fn deserialize_array(arr: &[u8]) -> Result<Resp, DeserializeError> {
     let arr_len = parse_resp_item_len(&arr[1..first_crlf])?;
     let mut buf = Vec::with_capacity(arr_len);
     let mut current_pos = first_crlf + crlf_len;
-    let mut parsed_item = 0;
-    while current_pos < arr.len() && parsed_item < arr_len {
+    //let mut parsed_item = 0;
+    while current_pos < arr.len() && buf.len() < arr_len {
         let current = &arr[current_pos..];
         match current[0] {
             BULK_STRING_PREFIX => {
@@ -51,21 +51,21 @@ pub(super) fn deserialize_array(arr: &[u8]) -> Result<Resp, DeserializeError> {
                 let item = &current[..item_len + 2];
                 let de_item = Resp::deserialize(item)?;
                 buf.push(de_item);
-                parsed_item += 1;
+                //parsed_item += 1;
                 current_pos += item.len();
             }
             SIMPLE_STRING_PREFIX => {
                 let item_crlf_pos = find_crlf(current)?;
                 let item = &current[..item_crlf_pos + crlf_len];
                 buf.push(Resp::deserialize(item)?);
-                parsed_item += 1;
+                //parsed_item += 1;
                 current_pos += item.len();
             }
             ARRAY_PREFIX => {
                 let item = Resp::deserialize(current)?;
                 current_pos += item.size();
                 buf.push(item);
-                parsed_item += 1;
+                //parsed_item += 1;
             }
             _any => {
                 todo!()
@@ -84,7 +84,7 @@ pub(super) fn deserialize_integer(input: &[u8]) -> Result<Resp, DeserializeError
     let integer = std::str::from_utf8(integer).unwrap();
     let integer = integer
         .parse()
-        .map_err(|err| DeserializeError::InvalidInteger)?;
+        .map_err(|_err| DeserializeError::InvalidInteger)?;
     Ok(Resp::Integers(integer))
 }
 #[cfg(test)]

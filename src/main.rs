@@ -226,7 +226,7 @@ mod test {
         }
         let results = join_all(client_handles).await;
         for result in results {
-            let (res, id) = result.unwrap();
+            let (res, _id) = result.unwrap();
             let test = String::from_utf8_lossy(&res);
             assert_eq!(test, EXPECT);
         }
