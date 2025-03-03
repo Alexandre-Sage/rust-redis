@@ -1,6 +1,5 @@
 pub mod resp;
 
-use core::error;
 use std::io;
 
 use resp::{DeserializeError, SerializeError};

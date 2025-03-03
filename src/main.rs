@@ -6,12 +6,8 @@ mod resp;
 use std::sync::Arc;
 
 use commands::{command_registry::CommandRegistry, echo::EchoCommand, ping::PingCommand};
-use errors::{
-    resp::{DeserializeError, SerializeError},
-    RustRedisError,
-};
-use log::logger;
-use resp::{serialize, Resp};
+use errors::RustRedisError;
+use resp::Resp;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
