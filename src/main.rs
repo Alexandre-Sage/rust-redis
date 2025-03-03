@@ -10,7 +10,8 @@ use errors::{
     resp::{DeserializeError, SerializeError},
     RustRedisError,
 };
-use resp::Resp;
+use log::logger;
+use resp::{serialize, Resp};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -45,6 +46,7 @@ impl RustRedis {
     pub fn address(&self) -> String {
         format!("{}:{}", self.host, self.port)
     }
+
     pub async fn run(&self, notify: Option<&Notify>) -> Result<(), RustRedisError> {
         let addr = self.address();
         let listener = TcpListener::bind(&addr).await?;
@@ -66,7 +68,18 @@ impl RustRedis {
                                     break;
                                 }
                                 Ok(size) => {
-                                    let commands = parse_commands(&buf[..size]).unwrap();
+                                    let commands = match parse_commands(&buf[..size]) {
+                                        Ok(commands) => commands,
+                                        Err(err) => {
+                                            let err = Into::<Resp>::into(err);
+                                            if let Ok(serialized) = err.serialize() {
+                                                let _ = stream.write_all(&serialized).await;
+                                            } else {
+                                                log::error!("Unable to serialize error")
+                                            }
+                                            continue;
+                                        }
+                                    };
                                     for command in commands {
                                         match command {
                                             Resp::Array(command_with_args) => {
@@ -83,21 +96,22 @@ impl RustRedis {
                                                             &command_with_args[1..],
                                                         )
                                                     }
-                                                    .map(|res| res.serialize())
-                                                    .map_err(|err| {
-                                                        Into::<Resp>::into(err).serialize()
-                                                    });
-                                                    if let Ok(response) = result {
-                                                        match stream
-                                                            .write_all(&response.unwrap())
-                                                            .await
-                                                        {
+                                                    .map_err(|err| Into::<Resp>::into(err));
+                                                    let response = match result {
+                                                        Ok(res) => res.serialize(),
+                                                        Err(err) => err.serialize(),
+                                                    };
+                                                    if let Ok(response) = response {
+                                                        match stream.write_all(&response).await {
                                                             Ok(_) => (),
                                                             Err(err) => {
                                                                 log::error!("{}", err.to_string());
                                                                 break;
                                                             }
                                                         }
+                                                    } else if let Err(err) = response {
+                                                        log::error!("{}", err.to_string());
+                                                        break;
                                                     }
                                                 }
                                             }
@@ -105,20 +119,21 @@ impl RustRedis {
                                         }
                                     }
                                 }
-                                Err(_) => {
+                                Err(err) => {
+                                    log::error!("{:?}", err.to_string());
                                     break;
                                 }
                             };
                         }
                     });
                 }
-                Err(err) => panic!("{:#?}", err),
+                Err(err) => log::error!("{:?}", err.to_string()),
             };
         }
     }
 }
 
-pub fn parse_commands(input: &[u8]) -> Result<Vec<Resp>, DeserializeError> {
+pub fn parse_commands(input: &[u8]) -> Result<Vec<Resp>, RustRedisError> {
     let mut parsed = 0;
     let mut commands = Vec::new();
     while parsed < input.len() {
@@ -127,6 +142,10 @@ pub fn parse_commands(input: &[u8]) -> Result<Vec<Resp>, DeserializeError> {
         commands.push(cur);
     }
     Ok(commands)
+}
+
+pub fn command_as_str(input: &[u8]) -> Result<&str, RustRedisError> {
+    std::str::from_utf8(input).map_err(|err| RustRedisError::InvalidCommand(err.to_string()))
 }
 
 #[tokio::main]
@@ -220,6 +239,15 @@ mod test {
     async fn should_handle_echo_command() {
         const EXPECT: &str = "$3\r\nhey\r\n";
         const INPUT: &str = "*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n";
+        let stream = setup().await;
+        let res = send_request(stream, INPUT).await;
+        let res = std::str::from_utf8(&res).unwrap();
+        assert_eq!(res, EXPECT)
+    }
+    #[tokio::test]
+    async fn should_reply_error_if_invalid_commands_parse() {
+        const INPUT: &str = "\r\n$4\r\nECHO\r\n$3\r\nhey\r\n";
+        const EXPECT: &str = "-ERR invalid resp prefix\r\n";
         let stream = setup().await;
         let res = send_request(stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();

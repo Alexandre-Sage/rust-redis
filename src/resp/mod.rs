@@ -48,10 +48,7 @@ impl Resp {
             ARRAY_PREFIX => deserialize_array(input),
             SIMPLE_ERROR_PREFIX => deserialize_simple_error(input),
             INTEGERS_PREFIX => deserialize_integer(input),
-            _any => {
-                //dbg!(&_any);
-                todo!()
-            }
+            _any => Err(DeserializeError::InvalidPrefix),
         }
     }
 
