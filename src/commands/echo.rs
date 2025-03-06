@@ -1,3 +1,5 @@
+use async_trait::async_trait;
+
 use crate::errors::RustRedisError;
 
 use super::command_registry::CommandHandler;
@@ -17,8 +19,12 @@ impl EchoCommand {
     }
 }
 
+#[async_trait]
 impl CommandHandler for EchoCommand {
-    fn handle(&self, args: &[crate::resp::Resp]) -> Result<crate::resp::Resp, RustRedisError> {
+    async fn handle(
+        &self,
+        args: &[crate::resp::Resp],
+    ) -> Result<crate::resp::Resp, RustRedisError> {
         dbg!(&args);
         if args.len() > 1 {
             return Err(RustRedisError::InvalidArgLength(
@@ -37,19 +43,23 @@ mod test {
 
     use super::EchoCommand;
 
-    #[test]
-    fn should_reply_to_echo() {
+    #[tokio::test]
+    async fn should_reply_to_echo() {
         let handler = EchoCommand::new();
-        let result = handler.handle(&[Resp::BulkString(b"HELLO WORLD".to_vec())]);
+        let result = handler
+            .handle(&[Resp::BulkString(b"HELLO WORLD".to_vec())])
+            .await;
         assert_eq!(result.unwrap(), Resp::BulkString(b"HELLO WORLD".to_vec()))
     }
-    #[test]
-    fn should_throw_error_for_invalid_arg_lenght() {
+    #[tokio::test]
+    async fn should_throw_error_for_invalid_arg_lenght() {
         let handler = EchoCommand::new();
-        let result = handler.handle(&[
-            Resp::BulkString(b"HELLO WORLD".to_vec()),
-            Resp::BulkString(b"HELLO WORLD".to_vec()),
-        ]);
+        let result = handler
+            .handle(&[
+                Resp::BulkString(b"HELLO WORLD".to_vec()),
+                Resp::BulkString(b"HELLO WORLD".to_vec()),
+            ])
+            .await;
         assert!(result.is_err())
     }
 }

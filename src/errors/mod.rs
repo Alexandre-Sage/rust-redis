@@ -4,7 +4,7 @@ use std::io;
 
 use resp::{DeserializeError, SerializeError};
 
-use crate::resp::Resp;
+use crate::{data_management::message::MessageChannelError, resp::Resp};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RustRedisError {
@@ -20,6 +20,10 @@ pub enum RustRedisError {
     SerializeError(#[from] SerializeError),
     #[error(transparent)]
     DeserializeError(#[from] DeserializeError),
+    #[error(transparent)]
+    MessageChannelError(#[from] MessageChannelError),
+    #[error("Invalid args expected: '{0}'")]
+    InvalidArgType(String),
 }
 
 impl From<RustRedisError> for Resp {

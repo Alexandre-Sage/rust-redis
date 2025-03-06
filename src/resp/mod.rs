@@ -21,7 +21,7 @@ mod deserialize;
 mod helpers;
 pub mod serialize;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Resp {
     SimpleString(Vec<u8>),
     SimpleError(Vec<u8>),
@@ -68,7 +68,13 @@ impl Resp {
             _ => Err(()),
         }
     }
-
+    pub fn is_bulk_string(&self) -> bool {
+        if let Self::BulkString(_) = self {
+            true
+        } else {
+            false
+        }
+    }
     pub fn size(&self) -> usize {
         match self {
             Self::SimpleError(string) | Self::SimpleString(string) => {

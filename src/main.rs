@@ -1,17 +1,28 @@
 pub mod commands;
+mod data_management;
 pub mod errors;
 pub mod helpers;
 mod resp;
 
-use std::sync::Arc;
+use std::{collections::HashMap, os::unix::thread, sync::Arc};
 
-use commands::{command_registry::CommandRegistry, echo::EchoCommand, ping::PingCommand};
+use commands::{
+    command_registry::CommandRegistry,
+    echo::EchoCommand,
+    ping::PingCommand,
+    set::{SetCommandHandler, SET_COMMAND_NAME},
+};
+use data_management::{
+    message::{DataChannelMessage, ResponseChannelMessage},
+    worker::data_management_worker_thread,
+};
 use errors::RustRedisError;
 use resp::Resp;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
-    sync::Notify,
+    sync::{mpsc, Notify},
+    task::JoinHandle,
 };
 
 #[derive(Debug)]
@@ -19,6 +30,7 @@ struct RustRedis {
     port: i32,
     host: String,
     command_registry: Arc<CommandRegistry>,
+    data_management_worker: Option<JoinHandle<()>>,
 }
 impl Default for RustRedis {
     fn default() -> Self {
@@ -31,12 +43,19 @@ impl Default for RustRedis {
 impl RustRedis {
     fn new(port: i32, host: String) -> Self {
         let mut command_registry = CommandRegistry::new();
+        let (data_sender, data_receiver) = mpsc::channel::<DataChannelMessage>(1000);
+        //let (response_sender, response_receiver) = mpsc::channel::<ResponseChannelMessage>(1000);
+        command_registry.register(
+            SET_COMMAND_NAME,
+            Box::new(SetCommandHandler::new(data_sender)),
+        );
         command_registry.register("ECHO", Box::new(EchoCommand::new()));
         command_registry.register("PING", Box::new(PingCommand));
         Self {
             port,
             host,
             command_registry: command_registry.into(),
+            data_management_worker: Some(data_management_worker_thread(data_receiver)),
         }
     }
     pub fn address(&self) -> String {
@@ -82,15 +101,18 @@ impl RustRedis {
                                                 if let Resp::BulkString(command) =
                                                     &command_with_args[0]
                                                 {
-                                                    let command =
-                                                        std::str::from_utf8(&command).unwrap();
+                                                    let command = command_as_str(&command).unwrap();
                                                     let result = if command_with_args.len() == 1 {
-                                                        command_registry.no_args_command(command)
+                                                        command_registry
+                                                            .no_args_command(command)
+                                                            .await
                                                     } else {
-                                                        command_registry.command_with_args(
-                                                            command,
-                                                            &command_with_args[1..],
-                                                        )
+                                                        command_registry
+                                                            .command_with_args(
+                                                                command,
+                                                                &command_with_args[1..],
+                                                            )
+                                                            .await
                                                     }
                                                     .map_err(|err| Into::<Resp>::into(err));
                                                     let response = match result {
@@ -160,7 +182,7 @@ mod test {
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpStream,
     };
-    // *1\r\n$4\r\nPING\r\n
+
     async fn setup() -> TcpStream {
         let notif = Arc::new(Notify::new());
         let notif2 = notif.clone();
@@ -171,7 +193,7 @@ mod test {
         notif.notified().await;
         TcpStream::connect("127.0.0.1:6379").await.unwrap()
     }
-    async fn send_request(mut stream: TcpStream, req: impl AsRef<[u8]>) -> Vec<u8> {
+    async fn send_request(stream: &mut TcpStream, req: impl AsRef<[u8]>) -> Vec<u8> {
         stream.write_all(req.as_ref()).await.unwrap();
         let mut buf = vec![0u8; 1024];
         let size = stream.read(&mut buf).await.unwrap();
@@ -182,8 +204,8 @@ mod test {
     async fn should_reply_to_ping() {
         const INPUT: &str = "*1\r\n$4\r\nPING\r\n";
         const EXPECT: &str = "+PONG\r\n";
-        let stream = setup().await;
-        let buf = send_request(stream, INPUT).await;
+        let mut stream = setup().await;
+        let buf = send_request(&mut stream, INPUT).await;
         assert_eq!(&buf, EXPECT.as_bytes())
     }
 
@@ -192,8 +214,8 @@ mod test {
         // *2\r\n$4\r\nPING\r\n$4\r\nPING\r\n
         const INPUT: &str = "*1\r\n$4\r\nPING\r\n*1\r\n$4\r\nPING\r\n";
         const EXPECT: &str = "+PONG";
-        let stream = setup().await;
-        let buf = send_request(stream, INPUT).await;
+        let mut stream = setup().await;
+        let buf = send_request(&mut stream, INPUT).await;
         let binding = String::from_utf8_lossy(&buf);
         let binding = binding.trim_end();
         let responses: Vec<&str> = binding.split("\r\n").collect();
@@ -231,22 +253,61 @@ mod test {
             assert_eq!(test, EXPECT);
         }
     }
+
     #[tokio::test]
     async fn should_handle_echo_command() {
         const EXPECT: &str = "$3\r\nhey\r\n";
         const INPUT: &str = "*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n";
-        let stream = setup().await;
-        let res = send_request(stream, INPUT).await;
+        let mut stream = setup().await;
+        let res = send_request(&mut stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();
         assert_eq!(res, EXPECT)
     }
+
     #[tokio::test]
     async fn should_reply_error_if_invalid_commands_parse() {
         const INPUT: &str = "\r\n$4\r\nECHO\r\n$3\r\nhey\r\n";
         const EXPECT: &str = "-ERR invalid resp prefix\r\n";
-        let stream = setup().await;
-        let res = send_request(stream, INPUT).await;
+        let mut stream = setup().await;
+        let res = send_request(&mut stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();
         assert_eq!(res, EXPECT)
+    }
+
+    #[tokio::test]
+    async fn should_reply_ok_on_set_successfull() {
+        const INPUT: &str = "*3\r\n$3\r\nSET\r\n$5\r\nhello\r\n$5\r\nworld\r\n";
+        const EXPECT: &str = "+OK\r\n";
+        let mut stream = setup().await;
+        let res = send_request(&mut stream, INPUT).await;
+        let res = std::str::from_utf8(&res).unwrap();
+        assert_eq!(res, EXPECT)
+    }
+    #[ignore = "not complete"]
+    #[test]
+    fn should_reply_error_if_invalid_utf8_command() {
+        let test_cases = [
+            &[0x80][..],                   // Standalone continuation byte
+            &[0xC2][..],                   // Truncated 2-byte sequence
+            &[0xE0, 0x80, 0x80][..],       // Overlong encoding
+            &[0xED, 0xA0, 0x80][..],       // UTF-16 surrogate
+            &[0xF0, 0x28, 0x8C, 0x28][..], // Invalid 4-byte sequence
+            &[0x41, 0x42, 0xFF, 0x43][..], // Valid ASCII with invalid byte
+        ];
+
+        for input in test_cases {
+            let res = command_as_str(input).unwrap_err();
+            dbg!(&res);
+            if let RustRedisError::InvalidCommand(err) = res {
+                let ok = matches!(
+                    err.as_str(),
+                    "invalid utf-8 sequence of 1 bytes from index 0"
+                        | "incomplete utf-8 byte sequence from index 0"
+                );
+                assert!(ok)
+            } else {
+                panic!()
+            }
+        }
     }
 }
