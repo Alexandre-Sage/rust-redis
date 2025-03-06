@@ -4,7 +4,7 @@ pub mod errors;
 pub mod helpers;
 mod resp;
 
-use std::{collections::HashMap, os::unix::thread, sync::Arc};
+use std::sync::Arc;
 
 use commands::{
     command_registry::CommandRegistry,
@@ -13,7 +13,7 @@ use commands::{
     set::{SetCommandHandler, SET_COMMAND_NAME},
 };
 use data_management::{
-    message::{DataChannelMessage, ResponseChannelMessage},
+    message::DataChannelMessage,
     worker::data_management_worker_thread,
 };
 use errors::RustRedisError;

@@ -4,7 +4,7 @@ use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::resp::Resp;
 
-use super::message::{self, DataChannelMessage, ResponseChannelMessage};
+use super::message::{DataChannelMessage, ResponseChannelMessage};
 
 pub fn data_management_worker_thread(
     mut data_receiver: mpsc::Receiver<DataChannelMessage>,

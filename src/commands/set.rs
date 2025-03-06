@@ -4,10 +4,9 @@ use tokio::sync::mpsc;
 
 use crate::{
     data_management::message::{
-        DataChannelMessage, MessageChannelError, ResponseChannelMessage, SetMessage,
+        DataChannelMessage, MessageChannelError, SetMessage,
     },
     errors::RustRedisError,
-    resp::Resp,
 };
 
 use super::command_registry::CommandHandler;
