@@ -22,13 +22,15 @@ pub(super) fn serialize_simple_string(simple_string: &[u8]) -> Result<Vec<u8>, S
 
 pub(super) fn serialize_bulk_string(bulk_string: &[u8]) -> Result<Vec<u8>, SerializeError> {
     let length = bulk_string.len();
-    let length_string = length.to_string();
+    let length_string = ternary_expr!(length == 0, "-1".to_owned(), length.to_string());
     let mut buf = Vec::with_capacity(length + (CRLF_BYTES.len() * 2) + length_string.len() + 1);
     buf.push(BULK_STRING_PREFIX);
     buf.extend_from_slice(length_string.as_bytes());
     buf.extend_from_slice(CRLF_BYTES);
-    buf.extend_from_slice(bulk_string);
-    buf.extend_from_slice(CRLF_BYTES);
+    if length > 0 {
+        buf.extend_from_slice(bulk_string);
+        buf.extend_from_slice(CRLF_BYTES);
+    }
     Ok(buf)
 }
 
@@ -118,5 +120,12 @@ mod test {
         const EXPECT: &[u8] = b":-1000\r\n";
         let result: Result<Vec<u8>, SerializeError> = serialize_integer(INPUT);
         assert_eq!(result.unwrap(), EXPECT)
+    }
+    #[test]
+    fn shoudl_serialize_null_bulk_string() {
+        const INPUT: &str = "";
+        const EXPECT: &str = "$-1\r\n";
+        let result = Resp::bulk_string_from_str(INPUT).serialize().unwrap();
+        assert_eq!(result, EXPECT.as_bytes())
     }
 }

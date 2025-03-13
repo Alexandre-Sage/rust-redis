@@ -8,6 +8,7 @@ pub enum MessageChannelError {
     DataReplying(#[from] tokio::sync::oneshot::error::RecvError),
 }
 
+#[derive(Debug)]
 pub struct SetMessage {
     pub key: Vec<u8>,
     pub value: Vec<u8>,
@@ -23,8 +24,24 @@ impl SetMessage {
         Self { key, value, sender }
     }
 }
-pub enum DataChannelMessage {
-    Set(SetMessage),
+
+#[derive(Debug)]
+pub struct GetMessage {
+    pub key: Vec<u8>,
+    pub sender: tokio::sync::oneshot::Sender<ResponseChannelMessage>,
 }
 
+impl GetMessage {
+    pub fn new(key: Vec<u8>, sender: tokio::sync::oneshot::Sender<ResponseChannelMessage>) -> Self {
+        Self { key, sender }
+    }
+}
+
+#[derive(Debug)]
+pub enum DataChannelMessage {
+    Set(SetMessage),
+    Get(GetMessage),
+}
+
+#[derive(Debug)]
 pub struct ResponseChannelMessage(pub(crate) Resp);

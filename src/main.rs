@@ -8,14 +8,11 @@ use std::sync::Arc;
 
 use commands::{
     command_registry::CommandRegistry,
-    echo::EchoCommand,
+    echo::{EchoCommand, ECHO_COMMAND_NAME},
     ping::PingCommand,
     set::{SetCommandHandler, SET_COMMAND_NAME},
 };
-use data_management::{
-    message::DataChannelMessage,
-    worker::data_management_worker_thread,
-};
+use data_management::{message::DataChannelMessage, worker::data_management_worker_thread};
 use errors::RustRedisError;
 use resp::Resp;
 use tokio::{
@@ -44,18 +41,17 @@ impl RustRedis {
     fn new(port: i32, host: String) -> Self {
         let mut command_registry = CommandRegistry::new();
         let (data_sender, data_receiver) = mpsc::channel::<DataChannelMessage>(1000);
-        //let (response_sender, response_receiver) = mpsc::channel::<ResponseChannelMessage>(1000);
         command_registry.register(
             SET_COMMAND_NAME,
             Box::new(SetCommandHandler::new(data_sender)),
         );
-        command_registry.register("ECHO", Box::new(EchoCommand::new()));
+        command_registry.register(ECHO_COMMAND_NAME, Box::new(EchoCommand::new()));
         command_registry.register("PING", Box::new(PingCommand));
         Self {
             port,
             host,
             command_registry: command_registry.into(),
-            data_management_worker: Some(data_management_worker_thread(data_receiver)),
+            data_management_worker: Some(data_management_worker_thread(data_receiver, None)),
         }
     }
     pub fn address(&self) -> String {

@@ -4,16 +4,16 @@ use crate::errors::RustRedisError;
 
 use super::command_registry::CommandHandler;
 
+pub const ECHO_COMMAND_NAME: &str = "ECHO";
+
 #[derive(Debug)]
 pub struct EchoCommand {
-    name: String,
     args: String,
 }
 
 impl EchoCommand {
     pub fn new() -> Self {
         Self {
-            name: "echo".to_string(),
             args: "1".to_string(),
         }
     }
@@ -28,7 +28,7 @@ impl CommandHandler for EchoCommand {
         dbg!(&args);
         if args.len() > 1 {
             return Err(RustRedisError::InvalidArgLength(
-                self.name.clone(),
+                ECHO_COMMAND_NAME.to_owned(),
                 args.len().to_string(),
                 self.args.clone(),
             ));

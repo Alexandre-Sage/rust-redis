@@ -60,6 +60,10 @@ impl Resp {
         Self::SimpleString(value.into())
     }
 
+    pub fn simple_error_from_str(value: &str) -> Self {
+        Self::SimpleError(value.into())
+    }
+
     pub fn as_str(&self) -> Result<&str, ()> {
         match self {
             Resp::BulkString(bulk) => Ok(std::str::from_utf8(bulk).unwrap()),
@@ -68,6 +72,7 @@ impl Resp {
             _ => Err(()),
         }
     }
+
     pub fn is_bulk_string(&self) -> bool {
         if let Self::BulkString(_) = self {
             true
