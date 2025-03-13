@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use futures::TryFutureExt;
 use tokio::sync::mpsc::Sender;
@@ -14,11 +16,11 @@ pub const GET_COMMAND_NAME: &str = "GET";
 
 #[derive(Debug)]
 pub struct GetCommandHandler {
-    data_sender: Sender<DataChannelMessage>,
+    data_sender: Arc<Sender<DataChannelMessage>>,
 }
 
 impl GetCommandHandler {
-    pub fn new(sender: Sender<DataChannelMessage>) -> Self {
+    pub fn new(sender: Arc<Sender<DataChannelMessage>>) -> Self {
         Self {
             data_sender: sender,
         }
@@ -62,7 +64,7 @@ mod test {
     #[tokio::test]
     async fn should_insert_data() {
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1000);
-        let handler = GetCommandHandler::new(sender);
+        let handler = GetCommandHandler::new(sender.into());
 
         tokio::spawn(async move {
             if let Some(message) = receiver.recv().await {

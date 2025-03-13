@@ -4,11 +4,12 @@ pub mod errors;
 pub mod helpers;
 mod resp;
 
-use std::sync::Arc;
+use std::{collections::HashMap, ops::Deref, sync::Arc};
 
 use commands::{
     command_registry::CommandRegistry,
     echo::{EchoCommand, ECHO_COMMAND_NAME},
+    get::{GetCommandHandler, GET_COMMAND_NAME},
     ping::PingCommand,
     set::{SetCommandHandler, SET_COMMAND_NAME},
 };
@@ -33,25 +34,35 @@ impl Default for RustRedis {
     fn default() -> Self {
         let host = "127.0.0.1".to_string();
         let port = 6379;
-        Self::new(port, host)
+        Self::new(port, host, None)
     }
 }
 
 impl RustRedis {
-    fn new(port: i32, host: String) -> Self {
+    fn new(port: i32, host: String, default_data: Option<HashMap<Vec<u8>, Vec<u8>>>) -> Self {
         let mut command_registry = CommandRegistry::new();
         let (data_sender, data_receiver) = mpsc::channel::<DataChannelMessage>(1000);
+        let data_sender = Arc::new(data_sender);
+
+        command_registry.register(
+            GET_COMMAND_NAME,
+            Box::new(GetCommandHandler::new(data_sender.clone())),
+        );
         command_registry.register(
             SET_COMMAND_NAME,
-            Box::new(SetCommandHandler::new(data_sender)),
+            Box::new(SetCommandHandler::new(data_sender.clone())),
         );
         command_registry.register(ECHO_COMMAND_NAME, Box::new(EchoCommand::new()));
         command_registry.register("PING", Box::new(PingCommand));
+
         Self {
             port,
             host,
             command_registry: command_registry.into(),
-            data_management_worker: Some(data_management_worker_thread(data_receiver, None)),
+            data_management_worker: Some(data_management_worker_thread(
+                data_receiver,
+                default_data,
+            )),
         }
     }
     pub fn address(&self) -> String {
@@ -61,18 +72,23 @@ impl RustRedis {
     pub async fn run(&self, notify: Option<&Notify>) -> Result<(), RustRedisError> {
         let addr = self.address();
         let listener = TcpListener::bind(&addr).await?;
+
         if let Some(notify) = notify {
             notify.notify_one();
         }
+
         log::info!("Rust redis is up");
+
         loop {
             match listener.accept().await {
                 Ok((mut stream, _)) => {
                     let command_registry = self.command_registry.clone();
                     tokio::spawn(async move {
                         log::info!("Incoming request");
+
                         loop {
                             let mut buf = vec![0u8; 1024];
+
                             match stream.read(&mut buf).await {
                                 Ok(0) => {
                                     //let _ = stream.write_all(b"NO COMMAND WAS SENDED").await;
@@ -83,6 +99,7 @@ impl RustRedis {
                                         Ok(commands) => commands,
                                         Err(err) => {
                                             let err = Into::<Resp>::into(err);
+
                                             if let Ok(serialized) = err.serialize() {
                                                 let _ = stream.write_all(&serialized).await;
                                             } else {
@@ -98,6 +115,7 @@ impl RustRedis {
                                                     &command_with_args[0]
                                                 {
                                                     let command = command_as_str(&command).unwrap();
+
                                                     let result = if command_with_args.len() == 1 {
                                                         command_registry
                                                             .no_args_command(command)
@@ -111,10 +129,12 @@ impl RustRedis {
                                                             .await
                                                     }
                                                     .map_err(|err| Into::<Resp>::into(err));
+
                                                     let response = match result {
                                                         Ok(res) => res.serialize(),
                                                         Err(err) => err.serialize(),
                                                     };
+
                                                     if let Ok(response) = response {
                                                         match stream.write_all(&response).await {
                                                             Ok(_) => (),
@@ -165,7 +185,7 @@ pub fn command_as_str(input: &[u8]) -> Result<&str, RustRedisError> {
 #[tokio::main]
 async fn main() -> Result<(), RustRedisError> {
     env_logger::init();
-    let runner = RustRedis::new(6379, "127.0.0.1".to_string());
+    let runner = RustRedis::new(6379, "127.0.0.1".to_string(), None);
     runner.run(None).await
 }
 #[cfg(test)]
@@ -179,11 +199,13 @@ mod test {
         net::TcpStream,
     };
 
-    async fn setup() -> TcpStream {
+    async fn setup(data: Option<HashMap<Vec<u8>, Vec<u8>>>) -> TcpStream {
+        let host = "127.0.0.1".to_string();
+        let port = 6379;
         let notif = Arc::new(Notify::new());
         let notif2 = notif.clone();
         tokio::spawn(async move {
-            let runner = RustRedis::default();
+            let runner = RustRedis::new(port, host, data);
             let _ = runner.run(Some(&notif2)).await;
         });
         notif.notified().await;
@@ -200,7 +222,7 @@ mod test {
     async fn should_reply_to_ping() {
         const INPUT: &str = "*1\r\n$4\r\nPING\r\n";
         const EXPECT: &str = "+PONG\r\n";
-        let mut stream = setup().await;
+        let mut stream = setup(None).await;
         let buf = send_request(&mut stream, INPUT).await;
         assert_eq!(&buf, EXPECT.as_bytes())
     }
@@ -210,7 +232,7 @@ mod test {
         // *2\r\n$4\r\nPING\r\n$4\r\nPING\r\n
         const INPUT: &str = "*1\r\n$4\r\nPING\r\n*1\r\n$4\r\nPING\r\n";
         const EXPECT: &str = "+PONG";
-        let mut stream = setup().await;
+        let mut stream = setup(None).await;
         let buf = send_request(&mut stream, INPUT).await;
         let binding = String::from_utf8_lossy(&buf);
         let binding = binding.trim_end();
@@ -254,7 +276,7 @@ mod test {
     async fn should_handle_echo_command() {
         const EXPECT: &str = "$3\r\nhey\r\n";
         const INPUT: &str = "*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n";
-        let mut stream = setup().await;
+        let mut stream = setup(None).await;
         let res = send_request(&mut stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();
         assert_eq!(res, EXPECT)
@@ -264,7 +286,7 @@ mod test {
     async fn should_reply_error_if_invalid_commands_parse() {
         const INPUT: &str = "\r\n$4\r\nECHO\r\n$3\r\nhey\r\n";
         const EXPECT: &str = "-ERR invalid resp prefix\r\n";
-        let mut stream = setup().await;
+        let mut stream = setup(None).await;
         let res = send_request(&mut stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();
         assert_eq!(res, EXPECT)
@@ -274,11 +296,40 @@ mod test {
     async fn should_reply_ok_on_set_successfull() {
         const INPUT: &str = "*3\r\n$3\r\nSET\r\n$5\r\nhello\r\n$5\r\nworld\r\n";
         const EXPECT: &str = "+OK\r\n";
-        let mut stream = setup().await;
+        let mut stream = setup(None).await;
         let res = send_request(&mut stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();
         assert_eq!(res, EXPECT)
     }
+
+    #[tokio::test]
+    async fn should_reply_to_get_command() {
+        const INPUT: &str = "*2\r\n$3\r\nGET\r\n$5\r\nhello\r\n";
+        const EXPECT: &str = "$5\r\nworld\r\n";
+
+        let key = Resp::bulk_string_from_str("hello").serialize().unwrap();
+        let value = Resp::bulk_string_from_str("world").serialize().unwrap();
+        let default = [(key.clone(), value.clone())].into_iter().collect();
+        let mut stream = setup(Some(default)).await;
+
+        let res = send_request(&mut stream, INPUT).await;
+        let res = std::str::from_utf8(&res).unwrap();
+
+        assert_eq!(res, EXPECT)
+    }
+
+    #[tokio::test]
+    async fn shoudl_reply_null_bulk_string_if_no_data() {
+        const INPUT: &str = "*2\r\n$3\r\nGET\r\n$5\r\nhello\r\n";
+        const EXPECT: &str = "$-1\r\n";
+        let mut stream = setup(None).await;
+
+        let res = send_request(&mut stream, INPUT).await;
+        let res = std::str::from_utf8(&res).unwrap();
+
+        assert_eq!(res, EXPECT)
+    }
+
     #[ignore = "not complete"]
     #[test]
     fn should_reply_error_if_invalid_utf8_command() {

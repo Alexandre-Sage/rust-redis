@@ -1,6 +1,8 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use futures::TryFutureExt;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, Sender};
 
 use crate::{
     data_management::message::{DataChannelMessage, MessageChannelError, SetMessage},
@@ -13,12 +15,12 @@ pub const SET_COMMAND_NAME: &str = "SET";
 
 #[derive(Debug)]
 pub struct SetCommandHandler {
-    data_sender: mpsc::Sender<DataChannelMessage>,
+    data_sender: Arc<Sender<DataChannelMessage>>,
     args: String,
 }
 
 impl SetCommandHandler {
-    pub fn new(data_sender: mpsc::Sender<DataChannelMessage>) -> Self {
+    pub fn new(data_sender: Arc<Sender<DataChannelMessage>>) -> Self {
         Self {
             data_sender,
             args: "2".to_owned(),
@@ -70,7 +72,7 @@ mod test {
     #[tokio::test]
     async fn should_insert_data() {
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1000);
-        let handler = SetCommandHandler::new(sender);
+        let handler = SetCommandHandler::new(sender.into());
         tokio::spawn(async move {
             if let Some(message) = receiver.recv().await {
                 match message {
