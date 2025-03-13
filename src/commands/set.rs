@@ -62,8 +62,9 @@ impl CommandHandler for SetCommandHandler {
 #[cfg(test)]
 mod test {
     use crate::{
-        commands::command_registry::CommandHandler,
+        commands::{command_registry::CommandHandler, set::SET_COMMAND_NAME},
         data_management::message::{DataChannelMessage, ResponseChannelMessage},
+        errors::RustRedisError,
         resp::Resp,
     };
 
@@ -93,4 +94,47 @@ mod test {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), Resp::simple_string_from_str("OK"));
     }
+
+    #[tokio::test]
+    async fn should_throw_error_if_not_enough_args() {
+        let (sender, _) = tokio::sync::mpsc::channel(1000);
+        let handler = SetCommandHandler::new(sender.into());
+
+        let result = handler.handle(&[Resp::bulk_string_from_str("HELLO")]).await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            RustRedisError::InvalidArgLength(
+                SET_COMMAND_NAME.to_owned(),
+                "1".to_owned(),
+                "2".to_owned(),
+            )
+            .to_string()
+        );
+    }
+
+    //#[tokio::test]
+    //async fn should_set_key_with_expiryt() {
+    //    let (sender, mut receiver) = tokio::sync::mpsc::channel(1000);
+    //    let handler = SetCommandHandler::new(sender.into());
+    //    tokio::spawn(async move {
+    //        if let Some(message) = receiver.recv().await {
+    //            match message {
+    //                DataChannelMessage::Set(message) => message
+    //                    .sender
+    //                    .send(ResponseChannelMessage(Resp::simple_string_from_str("OK")))
+    //                    .unwrap(),
+    //                _ => panic!(),
+    //            }
+    //        };
+    //    });
+    //    let result = handler
+    //        .handle(&[
+    //            Resp::bulk_string_from_str("HELLO"),
+    //            Resp::bulk_string_from_str("WORLD"),
+    //        ])
+    //        .await;
+    //    assert!(result.is_ok());
+    //    assert_eq!(result.unwrap(), Resp::simple_string_from_str("OK"));
+    //}
 }

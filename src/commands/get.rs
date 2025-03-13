@@ -54,15 +54,16 @@ impl CommandHandler for GetCommandHandler {
 #[cfg(test)]
 mod test {
     use crate::{
-        commands::command_registry::CommandHandler,
+        commands::{command_registry::CommandHandler, get::GET_COMMAND_NAME},
         data_management::message::{DataChannelMessage, ResponseChannelMessage},
+        errors::RustRedisError,
         resp::Resp,
     };
 
     use super::GetCommandHandler;
 
     #[tokio::test]
-    async fn should_insert_data() {
+    async fn should_retrieve_data() {
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1000);
         let handler = GetCommandHandler::new(sender.into());
 
@@ -81,5 +82,23 @@ mod test {
         let result = handler.handle(&[Resp::bulk_string_from_str("HELLO")]).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), Resp::bulk_string_from_str("world"));
+    }
+
+    #[tokio::test]
+    async fn should_throw_error_if_not_enough_args() {
+        let (sender, _) = tokio::sync::mpsc::channel(1000);
+        let handler = GetCommandHandler::new(sender.into());
+
+        let result = handler.handle(&[]).await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            RustRedisError::InvalidArgLength(
+                GET_COMMAND_NAME.to_owned(),
+                "1".to_owned(),
+                "0".to_owned(),
+            )
+            .to_string()
+        );
     }
 }
