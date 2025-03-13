@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
+use chrono::Utc;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{errors::RustRedisError, resp::Resp};
 
-use super::message::{DataChannelMessage, ResponseChannelMessage};
+use super::message::{DataChannelMessage, ResponseChannelMessage, SetMessage};
 
 pub fn data_management_worker_thread(
     mut data_receiver: mpsc::Receiver<DataChannelMessage>,
@@ -12,7 +13,7 @@ pub fn data_management_worker_thread(
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut data_store = match default_value {
-            None => HashMap::<Vec<u8>, Vec<u8>>::new(),
+            None => Default::default(),
             Some(data) => data,
         };
 
