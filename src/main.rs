@@ -49,7 +49,7 @@ async fn main() -> Result<(), RustRedisError> {
 }
 #[cfg(test)]
 mod test {
-    use std::{sync::Arc, usize};
+    use std::{sync::Arc, time::Duration, usize};
 
     use super::*;
     use data_management::datastore::DataStoreEntry;
@@ -201,6 +201,25 @@ mod test {
         let mut stream = setup(None).await;
         let res = send_request(&mut stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();
+        assert_eq!(res, EXPECT)
+    }
+
+    #[tokio::test]
+    async fn should_reply_null_bulk_string_if_expired_date() {
+        const INPUT: &str = "*2\r\n$3\r\nGET\r\n$5\r\nhello\r\n";
+        const EXPECT: &str = "$-1\r\n";
+
+        let key = Resp::bulk_string_from_str("hello").serialize().unwrap();
+        let value = Resp::bulk_string_from_str("world").serialize().unwrap();
+        let expiry = Duration::from_millis(1);
+        let entry = DataStoreEntry::new(value, Some(expiry));
+        let default = [(key.clone(), entry)];
+        let mut stream = setup(Some(default.into())).await;
+        tokio::time::sleep(Duration::from_millis(2)).await;
+
+        let res = send_request(&mut stream, INPUT).await;
+        let res = std::str::from_utf8(&res).unwrap();
+
         assert_eq!(res, EXPECT)
     }
     //#[ignore = "not complete"]
