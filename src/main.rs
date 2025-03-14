@@ -5,27 +5,14 @@ mod event_loop;
 pub mod helpers;
 mod resp;
 
-use std::sync::Arc;
 
-use commands::{
-    command_registry::CommandRegistry,
-    echo::{EchoCommand, ECHO_COMMAND_NAME},
-    get::{GetCommandHandler, GET_COMMAND_NAME},
-    ping::PingCommand,
-    set::{SetCommandHandler, SET_COMMAND_NAME},
-};
 use data_management::{
     datastore::DataStore, hash_table_store::HashTableDataStore, message::DataChannelMessage,
     worker::DataManager,
 };
 use errors::RustRedisError;
 use event_loop::EventLoop;
-use resp::Resp;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
-    sync::{mpsc, Notify},
-};
+use tokio::sync::{mpsc, Notify};
 
 pub struct App<T>
 where
