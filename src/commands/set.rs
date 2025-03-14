@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::TryFutureExt;
-use tokio::sync::mpsc::{self, Sender};
+use tokio::sync::mpsc::{Sender};
 
 use crate::{
     data_management::message::{DataChannelMessage, MessageChannelError, SetMessage},

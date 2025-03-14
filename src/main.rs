@@ -4,7 +4,7 @@ pub mod errors;
 pub mod helpers;
 mod resp;
 
-use std::{collections::HashMap, ops::Deref, sync::Arc};
+use std::sync::Arc;
 
 use commands::{
     command_registry::CommandRegistry,
@@ -16,7 +16,7 @@ use commands::{
 use data_management::{
     datastore::DataStore,
     hash_table_store::HashTableDataStore,
-    message::{DataChannelMessage, MessageChannelError},
+    message::DataChannelMessage,
     worker::DataManager,
 };
 use errors::RustRedisError;
@@ -25,7 +25,6 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
     sync::{mpsc, Notify},
-    task::JoinHandle,
 };
 
 pub struct App<T>

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 
 use tokio::{sync::mpsc, task::JoinHandle};
 
@@ -6,7 +5,7 @@ use crate::{errors::RustRedisError, resp::Resp};
 
 use super::{
     datastore::DataStore,
-    message::{DataChannelMessage, ResponseChannelMessage, SetMessage},
+    message::{DataChannelMessage, ResponseChannelMessage},
 };
 
 #[derive(Debug)]
@@ -133,8 +132,7 @@ mod test {
 
     use super::*;
     use crate::data_management::{
-        self,
-        datastore::{DataStore, DataStoreEntry},
+        datastore::DataStoreEntry,
         hash_table_store::HashTableDataStore,
         message::{GetMessage, SetMessage},
     };
