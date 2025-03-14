@@ -14,8 +14,10 @@ use commands::{
     set::{SetCommandHandler, SET_COMMAND_NAME},
 };
 use data_management::{
-    datastore::DataStore, hash_table_store::HashTableDataStore, message::DataChannelMessage,
-    worker::data_management_worker_thread,
+    datastore::DataStore,
+    hash_table_store::HashTableDataStore,
+    message::{DataChannelMessage, MessageChannelError},
+    worker::DataManager,
 };
 use errors::RustRedisError;
 use resp::Resp;
@@ -26,26 +28,51 @@ use tokio::{
     task::JoinHandle,
 };
 
+pub struct App<T>
+where
+    T: DataStore,
+{
+    event_loop: EventLoop,
+    data_manager: DataManager<T>,
+}
+
+impl<T> App<T>
+where
+    T: DataStore,
+{
+    pub fn new(port: i32, host: String, data_store: Option<T>) -> Self {
+        let (data_sender, data_receiver) = mpsc::channel::<DataChannelMessage>(1000);
+        let event_loop = EventLoop::new(port, host, data_sender.into());
+        let data_manager = DataManager::new(data_receiver, data_store);
+        Self {
+            event_loop,
+            data_manager,
+        }
+    }
+
+    pub async fn run(self, notif: Option<&Notify>) -> Result<(), RustRedisError> {
+        self.data_manager.run();
+        self.event_loop.run(notif).await
+    }
+}
+
 #[derive(Debug)]
 struct EventLoop {
     port: i32,
     host: String,
     command_registry: Arc<CommandRegistry>,
-    data_management_worker: Option<JoinHandle<()>>,
-}
-impl Default for EventLoop {
-    fn default() -> Self {
-        let host = "127.0.0.1".to_string();
-        let port = 6379;
-        Self::new(port, host, None)
-    }
+    data_sender: Arc<tokio::sync::mpsc::Sender<DataChannelMessage>>,
 }
 
 impl EventLoop {
-    fn new(port: i32, host: String, default_data: Option<HashTableDataStore>) -> Self {
-        let (data_sender, data_receiver) = mpsc::channel::<DataChannelMessage>(1000);
+    fn new(
+        port: i32,
+        host: String,
+        data_sender: Arc<tokio::sync::mpsc::Sender<DataChannelMessage>>,
+    ) -> Self {
+        //let (data_sender, data_receiver) = mpsc::channel::<DataChannelMessage>(1000);
         let mut command_registry = CommandRegistry::new();
-        let data_sender = Arc::new(data_sender);
+        //let data_sender = Arc::new(data_sender);
 
         command_registry.register(
             GET_COMMAND_NAME,
@@ -62,10 +89,7 @@ impl EventLoop {
             port,
             host,
             command_registry: command_registry.into(),
-            data_management_worker: Some(data_management_worker_thread(
-                data_receiver,
-                default_data,
-            )),
+            data_sender,
         }
     }
     pub fn address(&self) -> String {
@@ -188,7 +212,7 @@ pub fn command_as_str(input: &[u8]) -> Result<&str, RustRedisError> {
 #[tokio::main]
 async fn main() -> Result<(), RustRedisError> {
     env_logger::init();
-    let runner = EventLoop::new(6379, "127.0.0.1".to_string(), None);
+    let runner = App::<HashTableDataStore>::new(6379, "127.0.0.1".to_string(), None);
     runner.run(None).await
 }
 #[cfg(test)]
@@ -209,7 +233,7 @@ mod test {
         let notif = Arc::new(Notify::new());
         let notif2 = notif.clone();
         tokio::spawn(async move {
-            let runner = EventLoop::new(port, host, data);
+            let runner = App::new(port, host, data);
             let _ = runner.run(Some(&notif2)).await;
         });
         notif.notified().await;
@@ -252,7 +276,7 @@ mod test {
         const EXPECT: &str = "+PONG\r\n";
         const CLIENTS: usize = 6;
         tokio::spawn(async move {
-            let runner = EventLoop::default();
+            let runner = App::<HashTableDataStore>::new(6379, "0.0.0.0".to_owned(), None);
             let _ = runner.run(None).await;
         });
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
