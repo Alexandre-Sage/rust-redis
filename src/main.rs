@@ -193,31 +193,41 @@ mod test {
         assert_eq!(res, EXPECT)
     }
 
-    #[ignore = "not complete"]
-    #[test]
-    fn should_reply_error_if_invalid_utf8_command() {
-        let test_cases = [
-            &[0x80][..],                   // Standalone continuation byte
-            &[0xC2][..],                   // Truncated 2-byte sequence
-            &[0xE0, 0x80, 0x80][..],       // Overlong encoding
-            &[0xED, 0xA0, 0x80][..],       // UTF-16 surrogate
-            &[0xF0, 0x28, 0x8C, 0x28][..], // Invalid 4-byte sequence
-            &[0x41, 0x42, 0xFF, 0x43][..], // Valid ASCII with invalid byte
-        ];
-
-        for input in test_cases {
-            let res = command_as_str(input).unwrap_err();
-            dbg!(&res);
-            if let RustRedisError::InvalidCommand(err) = res {
-                let ok = matches!(
-                    err.as_str(),
-                    "invalid utf-8 sequence of 1 bytes from index 0"
-                        | "incomplete utf-8 byte sequence from index 0"
-                );
-                assert!(ok)
-            } else {
-                panic!()
-            }
-        }
+    #[tokio::test]
+    async fn should_set_data_with_expiry() {
+        const INPUT: &str =
+            "*5\r\n$3\r\nSET\r\n$5\r\nhello\r\n$5\r\nworld\r\n$2\r\nPX\r\n$1\r\n1\r\n";
+        const EXPECT: &str = "+OK\r\n";
+        let mut stream = setup(None).await;
+        let res = send_request(&mut stream, INPUT).await;
+        let res = std::str::from_utf8(&res).unwrap();
+        assert_eq!(res, EXPECT)
     }
+    //#[ignore = "not complete"]
+    //#[test]
+    //fn should_reply_error_if_invalid_utf8_command() {
+    //    let test_cases = [
+    //        &[0x80][..],                   // Standalone continuation byte
+    //        &[0xC2][..],                   // Truncated 2-byte sequence
+    //        &[0xE0, 0x80, 0x80][..],       // Overlong encoding
+    //        &[0xED, 0xA0, 0x80][..],       // UTF-16 surrogate
+    //        &[0xF0, 0x28, 0x8C, 0x28][..], // Invalid 4-byte sequence
+    //        &[0x41, 0x42, 0xFF, 0x43][..], // Valid ASCII with invalid byte
+    //    ];
+    //
+    //    for input in test_cases {
+    //        let res = command_as_str(input).unwrap_err();
+    //        dbg!(&res);
+    //        if let RustRedisError::InvalidCommand(err) = res {
+    //            let ok = matches!(
+    //                err.as_str(),
+    //                "invalid utf-8 sequence of 1 bytes from index 0"
+    //                    | "incomplete utf-8 byte sequence from index 0"
+    //            );
+    //            assert!(ok)
+    //        } else {
+    //            panic!()
+    //        }
+    //    }
+    //}
 }
