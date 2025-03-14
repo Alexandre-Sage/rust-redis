@@ -53,7 +53,6 @@ mod test {
 
     use super::*;
     use data_management::datastore::DataStoreEntry;
-    use event_loop::command_as_str;
     use futures::future::join_all;
     use resp::Resp;
     use tokio::{
@@ -214,6 +213,7 @@ mod test {
         let expiry = Duration::from_millis(1);
         let entry = DataStoreEntry::new(value, Some(expiry));
         let default = [(key.clone(), entry)];
+
         let mut stream = setup(Some(default.into())).await;
         tokio::time::sleep(Duration::from_millis(2)).await;
 
