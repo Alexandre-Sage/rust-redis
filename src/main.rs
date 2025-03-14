@@ -13,7 +13,10 @@ use commands::{
     ping::PingCommand,
     set::{SetCommandHandler, SET_COMMAND_NAME},
 };
-use data_management::{message::DataChannelMessage, worker::data_management_worker_thread};
+use data_management::{
+    datastore::DataStore, hash_table_store::HashTableDataStore, message::DataChannelMessage,
+    worker::data_management_worker_thread,
+};
 use errors::RustRedisError;
 use resp::Resp;
 use tokio::{
@@ -24,13 +27,13 @@ use tokio::{
 };
 
 #[derive(Debug)]
-struct RustRedis {
+struct EventLoop {
     port: i32,
     host: String,
     command_registry: Arc<CommandRegistry>,
     data_management_worker: Option<JoinHandle<()>>,
 }
-impl Default for RustRedis {
+impl Default for EventLoop {
     fn default() -> Self {
         let host = "127.0.0.1".to_string();
         let port = 6379;
@@ -38,10 +41,10 @@ impl Default for RustRedis {
     }
 }
 
-impl RustRedis {
-    fn new(port: i32, host: String, default_data: Option<HashMap<Vec<u8>, Vec<u8>>>) -> Self {
-        let mut command_registry = CommandRegistry::new();
+impl EventLoop {
+    fn new(port: i32, host: String, default_data: Option<HashTableDataStore>) -> Self {
         let (data_sender, data_receiver) = mpsc::channel::<DataChannelMessage>(1000);
+        let mut command_registry = CommandRegistry::new();
         let data_sender = Arc::new(data_sender);
 
         command_registry.register(
@@ -185,7 +188,7 @@ pub fn command_as_str(input: &[u8]) -> Result<&str, RustRedisError> {
 #[tokio::main]
 async fn main() -> Result<(), RustRedisError> {
     env_logger::init();
-    let runner = RustRedis::new(6379, "127.0.0.1".to_string(), None);
+    let runner = EventLoop::new(6379, "127.0.0.1".to_string(), None);
     runner.run(None).await
 }
 #[cfg(test)]
@@ -193,19 +196,20 @@ mod test {
     use std::{sync::Arc, usize};
 
     use super::*;
+    use data_management::datastore::DataStoreEntry;
     use futures::future::join_all;
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpStream,
     };
 
-    async fn setup(data: Option<HashMap<Vec<u8>, Vec<u8>>>) -> TcpStream {
+    async fn setup(data: Option<HashTableDataStore>) -> TcpStream {
         let host = "127.0.0.1".to_string();
         let port = 6379;
         let notif = Arc::new(Notify::new());
         let notif2 = notif.clone();
         tokio::spawn(async move {
-            let runner = RustRedis::new(port, host, data);
+            let runner = EventLoop::new(port, host, data);
             let _ = runner.run(Some(&notif2)).await;
         });
         notif.notified().await;
@@ -248,7 +252,7 @@ mod test {
         const EXPECT: &str = "+PONG\r\n";
         const CLIENTS: usize = 6;
         tokio::spawn(async move {
-            let runner = RustRedis::default();
+            let runner = EventLoop::default();
             let _ = runner.run(None).await;
         });
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -309,8 +313,9 @@ mod test {
 
         let key = Resp::bulk_string_from_str("hello").serialize().unwrap();
         let value = Resp::bulk_string_from_str("world").serialize().unwrap();
-        let default = [(key.clone(), value.clone())].into_iter().collect();
-        let mut stream = setup(Some(default)).await;
+        let entry = DataStoreEntry::new(value, None);
+        let default = [(key.clone(), entry)];
+        let mut stream = setup(Some(default.into())).await;
 
         let res = send_request(&mut stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();

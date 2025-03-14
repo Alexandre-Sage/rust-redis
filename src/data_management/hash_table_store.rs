@@ -7,6 +7,16 @@ use super::datastore::{DataStore, DataStoreEntry};
 #[derive(Debug, Default)]
 pub struct HashTableDataStore(HashMap<Vec<u8>, DataStoreEntry>);
 
+impl<I> From<I> for HashTableDataStore
+where
+    I: Into<HashMap<Vec<u8>, DataStoreEntry>>, //I: IntoIterator<Item = (K, V)> + FromIterator<(K, V)>,
+                                               //K: Hash,
+{
+    fn from(value: I) -> Self {
+        Self(value.into())
+    }
+}
+
 impl DataStore for HashTableDataStore {
     fn insert(&mut self, key: Vec<u8>, data: Vec<u8>, expiry: Option<Duration>) {
         let new_entry = DataStoreEntry::new(data, expiry);

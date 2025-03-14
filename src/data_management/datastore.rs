@@ -1,7 +1,7 @@
 use std::time::{Duration, SystemTime};
 
 #[derive(Debug)]
-pub(super) struct DataStoreEntry {
+pub struct DataStoreEntry {
     pub data: Vec<u8>,
     expiry: Option<SystemTime>,
 }
@@ -23,7 +23,7 @@ impl DataStoreEntry {
     }
 }
 
-pub trait DataStore {
+pub trait DataStore: Send + Sync + Default + 'static {
     fn insert(&mut self, key: Vec<u8>, data: Vec<u8>, expiry: Option<Duration>);
     fn get(&mut self, key: Vec<u8>) -> Option<Vec<u8>>;
 }
