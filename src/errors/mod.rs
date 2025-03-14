@@ -1,6 +1,6 @@
 pub mod resp;
 
-use std::io;
+use std::{io, num::ParseIntError, str::Utf8Error};
 
 use resp::{DeserializeError, SerializeError};
 
@@ -24,6 +24,12 @@ pub enum RustRedisError {
     MessageChannelError(#[from] MessageChannelError),
     #[error("Invalid args expected: '{0}'")]
     InvalidArgType(String),
+    #[error("Invalid arg for command {0} expected {1} got {2}")]
+    InvalidArg(String, String, String),
+    #[error("Could not parse expiration to a valid number")]
+    InvalidExpiry(#[from] ParseIntError),
+    #[error(transparent)]
+    InvalidUtf8(#[from] Utf8Error),
 }
 
 impl From<RustRedisError> for Resp {

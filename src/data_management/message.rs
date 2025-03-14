@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::resp::Resp;
 
 #[derive(Debug, thiserror::Error)]
@@ -13,6 +15,7 @@ pub struct SetMessage {
     pub key: Vec<u8>,
     pub value: Vec<u8>,
     pub sender: tokio::sync::oneshot::Sender<ResponseChannelMessage>,
+    pub expiry: Option<Duration>,
 }
 
 impl SetMessage {
@@ -20,8 +23,14 @@ impl SetMessage {
         key: Vec<u8>,
         value: Vec<u8>,
         sender: tokio::sync::oneshot::Sender<ResponseChannelMessage>,
+        expiry: Option<Duration>,
     ) -> Self {
-        Self { key, value, sender }
+        Self {
+            key,
+            value,
+            sender,
+            expiry,
+        }
     }
 }
 

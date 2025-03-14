@@ -1,4 +1,3 @@
-
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{errors::RustRedisError, resp::Resp};
@@ -57,7 +56,7 @@ where
                     DataChannelMessage::Get(message) => {
                         let response = match self.data_store.get(message.key) {
                             Some(data) => Resp::deserialize(&data),
-                            None => Ok(Resp::bulk_string_from_str("")),
+                            None => Ok(Resp::null_bulk_string()),
                         };
 
                         let response = match response {
@@ -76,54 +75,6 @@ where
         })
     }
 }
-
-//pub fn data_management_worker_thread<T>(
-//    mut data_receiver: mpsc::Receiver<DataChannelMessage>,
-//    default_value: Option<T>,
-//) -> JoinHandle<()>
-//where
-//    T: DataStore,
-//{
-//    tokio::spawn(async move {
-//        let mut data_store = match default_value {
-//            None => Default::default(),
-//            Some(data) => data,
-//        };
-//
-//        while let Some(message) = data_receiver.recv().await {
-//            match message {
-//                DataChannelMessage::Set(message) => {
-//                    data_store.insert(message.key, message.value, None);
-//
-//                    match message
-//                        .sender
-//                        .send(ResponseChannelMessage(Resp::simple_string_from_str("OK")))
-//                    {
-//                        Ok(_) => (),
-//                        Err(err) => log::error!("Could not reply: {:?}", err.0),
-//                    }
-//                }
-//                DataChannelMessage::Get(message) => {
-//                    let response = match data_store.get(message.key) {
-//                        Some(data) => Resp::deserialize(&data),
-//                        None => Ok(Resp::bulk_string_from_str("")),
-//                    };
-//
-//                    let response = match response {
-//                        Ok(data) => data,
-//                        Err(err) => RustRedisError::from(err).into(),
-//                    };
-//
-//                    message
-//                        .sender
-//                        .send(ResponseChannelMessage(response))
-//                        .unwrap();
-//                }
-//                _ => todo!(),
-//            }
-//        }
-//    })
-//}
 
 #[cfg(test)]
 mod test {
@@ -146,7 +97,7 @@ mod test {
         let key = Resp::bulk_string_from_str("hello").serialize().unwrap();
         let value = Resp::bulk_string_from_str("world").serialize().unwrap();
 
-        let message = SetMessage::new(key, value, response_sender);
+        let message = SetMessage::new(key, value, response_sender, None);
         data_sender
             .send(DataChannelMessage::Set(message))
             .await
@@ -168,7 +119,6 @@ mod test {
         let (response_sender, response_receiver) = tokio::sync::oneshot::channel();
 
         DataManager::worker(data_receiver, Some(default));
-        //data_management_worker_thread(data_receiver, Some(default));
         let message = GetMessage::new(key, response_sender);
         data_sender
             .send(DataChannelMessage::Get(message))
@@ -205,7 +155,7 @@ mod test {
         let expiry = Duration::from_millis(1);
         let entry = DataStoreEntry::new(value, Some(expiry));
         let data_store = HashTableDataStore::from([(key.clone(), entry)]);
-
+        tokio::time::sleep(Duration::from_millis(2)).await;
         let (data_sender, data_receiver) = mpsc::channel::<DataChannelMessage>(1000);
         let (response_sender, response_receiver) = tokio::sync::oneshot::channel();
 

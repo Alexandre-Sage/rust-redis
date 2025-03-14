@@ -52,6 +52,10 @@ impl Resp {
         }
     }
 
+    pub fn null_bulk_string() -> Self {
+        Self::bulk_string_from_str("")
+    }
+
     pub fn bulk_string_from_str(value: &str) -> Self {
         Self::BulkString(value.into())
     }
