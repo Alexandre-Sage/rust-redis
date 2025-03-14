@@ -5,7 +5,6 @@ mod event_loop;
 pub mod helpers;
 mod resp;
 
-
 use data_management::{
     datastore::DataStore, hash_table_store::HashTableDataStore, message::DataChannelMessage,
     worker::DataManager,
@@ -56,6 +55,7 @@ mod test {
     use data_management::datastore::DataStoreEntry;
     use event_loop::command_as_str;
     use futures::future::join_all;
+    use resp::Resp;
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpStream,
