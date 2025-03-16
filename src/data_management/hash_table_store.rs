@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    time::{Duration},
-};
+use std::{collections::HashMap, time::Duration};
 
 use super::datastore::{DataStore, DataStoreEntry};
 #[derive(Debug, Default)]
@@ -36,6 +33,9 @@ impl DataStore for HashTableDataStore {
             None => None,
         }
     }
+    fn clean(&mut self) -> () {
+        self.0.retain(|_, v| !v.expired());
+    }
 }
 
 #[cfg(test)]
@@ -60,5 +60,21 @@ mod test {
         let entry_with_expiry = DataStoreEntry::new(vec![], Some(Duration::from_millis(10000)));
         let mut store = HashTableDataStore(HashMap::from([(b"hello".to_vec(), entry_with_expiry)]));
         assert!(store.get(b"hello".to_vec()).is_some())
+    }
+
+    #[test]
+    fn should_clean_expired() {
+        let entry_expired = DataStoreEntry::new(vec![], Some(Duration::from_millis(1)));
+        let entry_not_expired =
+            DataStoreEntry::new(b"world".to_vec(), Some(Duration::from_millis(10000)));
+        let mut store = HashTableDataStore::from([
+            (b"hello".to_vec(), entry_not_expired.clone()),
+            (b"expired".to_vec(), entry_expired),
+        ]);
+        store.clean();
+        assert_eq!(
+            store.get(b"hello".to_vec()).unwrap(),
+            entry_not_expired.data
+        )
     }
 }

@@ -1,4 +1,9 @@
-use tokio::{sync::mpsc, task::JoinHandle};
+use std::{sync::Arc, time::Duration};
+
+use tokio::{
+    sync::{mpsc, Mutex},
+    task::JoinHandle,
+};
 
 use crate::{errors::RustRedisError, resp::Resp};
 
@@ -14,29 +19,50 @@ where
 {
     data_store: T,
     data_receiver: mpsc::Receiver<DataChannelMessage>,
+    cleanup_intervall: Arc<Duration>,
 }
 
 impl<T> DataManager<T>
 where
     T: DataStore,
 {
-    pub fn new(data_receiver: mpsc::Receiver<DataChannelMessage>, data_store: Option<T>) -> Self {
+    pub fn new(
+        data_receiver: mpsc::Receiver<DataChannelMessage>,
+        data_store: Option<T>,
+        cleanup_intervall: Option<Duration>,
+    ) -> Self {
         Self {
             data_store: match data_store {
                 Some(data) => data,
                 None => Default::default(),
             },
             data_receiver,
+            cleanup_intervall: match cleanup_intervall {
+                Some(duration) => duration,
+                None => Duration::from_secs(60 * 60),
+            }
+            .into(),
         }
     }
 
     fn worker(
         data_receiver: mpsc::Receiver<DataChannelMessage>,
         data_store: Option<T>,
+        cleanup_intervall: Option<Duration>,
     ) -> JoinHandle<()> {
-        let manager = Self::new(data_receiver, data_store);
+        let manager = Self::new(data_receiver, data_store, cleanup_intervall);
         manager.run()
     }
+    //pub fn cleanup(&mut self) -> JoinHandle<()> {
+    //    let cleanup_intervall = self.cleanup_intervall.clone();
+    //    let store = self.data_store.clone();
+    //    tokio::spawn(async move {
+    //        loop {
+    //            store.lock().await.clean();
+    //            tokio::time::sleep(*cleanup_intervall).await;
+    //        }
+    //    })
+    //}
 
     pub fn run(mut self) -> JoinHandle<()> {
         tokio::spawn(async move {
@@ -92,7 +118,7 @@ mod test {
     async fn should_insert_key_value() {
         let (data_sender, data_receiver) = mpsc::channel::<DataChannelMessage>(1000);
         let (response_sender, response_receiver) = tokio::sync::oneshot::channel();
-        DataManager::<HashTableDataStore>::worker(data_receiver, None);
+        DataManager::<HashTableDataStore>::worker(data_receiver, None, None);
 
         let key = Resp::bulk_string_from_str("hello").serialize().unwrap();
         let value = Resp::bulk_string_from_str("world").serialize().unwrap();
@@ -118,7 +144,7 @@ mod test {
         let (data_sender, data_receiver) = mpsc::channel::<DataChannelMessage>(1000);
         let (response_sender, response_receiver) = tokio::sync::oneshot::channel();
 
-        DataManager::worker(data_receiver, Some(default));
+        DataManager::worker(data_receiver, Some(default), None);
         let message = GetMessage::new(key, response_sender);
         data_sender
             .send(DataChannelMessage::Get(message))
@@ -136,7 +162,7 @@ mod test {
         let (data_sender, data_receiver) = mpsc::channel::<DataChannelMessage>(1000);
         let (response_sender, response_receiver) = tokio::sync::oneshot::channel();
 
-        DataManager::<HashTableDataStore>::worker(data_receiver, None);
+        DataManager::<HashTableDataStore>::worker(data_receiver, None, None);
         let message = GetMessage::new(key, response_sender);
         data_sender
             .send(DataChannelMessage::Get(message))
@@ -159,7 +185,7 @@ mod test {
         let (data_sender, data_receiver) = mpsc::channel::<DataChannelMessage>(1000);
         let (response_sender, response_receiver) = tokio::sync::oneshot::channel();
 
-        DataManager::worker(data_receiver, Some(data_store));
+        DataManager::worker(data_receiver, Some(data_store), None);
         let message = GetMessage::new(key, response_sender);
         data_sender
             .send(DataChannelMessage::Get(message))

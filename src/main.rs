@@ -28,7 +28,7 @@ where
     pub fn new(port: i32, host: String, data_store: Option<T>) -> Self {
         let (data_sender, data_receiver) = mpsc::channel::<DataChannelMessage>(1000);
         let event_loop = EventLoop::new(port, host, data_sender.into());
-        let data_manager = DataManager::new(data_receiver, data_store);
+        let data_manager = DataManager::new(data_receiver, data_store, None);
         Self {
             event_loop,
             data_manager,

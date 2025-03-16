@@ -1,6 +1,6 @@
 use std::time::{Duration, SystemTime};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DataStoreEntry {
     pub data: Vec<u8>,
     expiry: Option<SystemTime>,
@@ -26,13 +26,12 @@ impl DataStoreEntry {
 pub trait DataStore: Send + Sync + Default + 'static {
     fn insert(&mut self, key: Vec<u8>, data: Vec<u8>, expiry: Option<Duration>);
     fn get(&mut self, key: Vec<u8>) -> Option<Vec<u8>>;
+    fn clean(&mut self) -> ();
 }
 
 #[cfg(test)]
 mod test {
     use std::time::Duration;
-
-    
 
     use super::DataStoreEntry;
 
