@@ -8,6 +8,8 @@ use crate::{data_management::message::MessageChannelError, resp::Resp};
 
 #[derive(Debug, thiserror::Error)]
 pub enum RustRedisError {
+    #[error("ERR invalid config field")]
+    InvalidConfigField(String),
     #[error("ERR invalid command '{0}'")]
     InvalidCommand(String),
     #[error("ERR unknown command '{0}'")]

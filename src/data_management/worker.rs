@@ -32,10 +32,7 @@ where
         cleanup_intervall: Option<Duration>,
     ) -> Self {
         Self {
-            data_store: match data_store {
-                Some(data) => data,
-                None => Default::default(),
-            },
+            data_store: data_store.unwrap_or_default(),
             data_receiver,
             cleanup_intervall: match cleanup_intervall {
                 Some(duration) => duration,

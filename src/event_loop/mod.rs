@@ -11,9 +11,11 @@ use crate::{
         command_registry::CommandRegistry,
         echo::{EchoCommand, ECHO_COMMAND_NAME},
         get::{GetCommandHandler, GET_COMMAND_NAME},
+        get_config::{GetConfigCommandHandler, GET_CONFIG_COMMAND_NAME},
         ping::PingCommand,
         set::{SetCommandHandler, SET_COMMAND_NAME},
     },
+    config::AppConfig,
     data_management::message::DataChannelMessage,
     errors::RustRedisError,
     resp::Resp,
@@ -32,9 +34,13 @@ impl EventLoop {
         port: i32,
         host: String,
         data_sender: Arc<tokio::sync::mpsc::Sender<DataChannelMessage>>,
+        config: &AppConfig,
     ) -> Self {
         let mut command_registry = CommandRegistry::new();
-
+        command_registry.register(
+            GET_CONFIG_COMMAND_NAME,
+            Box::new(GetConfigCommandHandler::new(config.into())),
+        );
         command_registry.register(
             GET_COMMAND_NAME,
             Box::new(GetCommandHandler::new(data_sender.clone())),
@@ -117,7 +123,6 @@ impl EventLoop {
                                                             .await
                                                     }
                                                     .map_err(|err| Into::<Resp>::into(err));
-
                                                     let response = match result {
                                                         Ok(res) => res.serialize(),
                                                         Err(err) => err.serialize(),

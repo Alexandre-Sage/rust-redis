@@ -47,8 +47,10 @@ pub(super) fn deserialize_array(arr: &[u8]) -> Result<Resp, DeserializeError> {
             BULK_STRING_PREFIX => {
                 let item_first_crlf_pos = find_crlf(current)?;
                 let item_len = parse_resp_item_len(&current[1..item_first_crlf_pos])?;
+                // TODO lenght du prefix
+                let prefix = item_len.to_string().len();
                 let item_len = item_len + (crlf_len * 2);
-                let item = &current[..item_len + 2];
+                let item = &current[..item_len + prefix + 1];
                 let de_item = Resp::deserialize(item)?;
                 buf.push(de_item);
                 //parsed_item += 1;
@@ -199,5 +201,14 @@ mod test {
         const EXPECT: i64 = -1000;
         let result: Result<Resp, DeserializeError> = deserialize_integer(INPUT);
         assert_eq!(result.unwrap(), Resp::Integers(EXPECT))
+    }
+
+    #[test]
+    fn should_deserialize_bulk_string_with_space() {
+        const INPUT: &str = "$10\r\nCONFIG GET\r\n";
+        const EXPECT: &[u8] = b"CONFIG GET";
+
+        let result = deserialize_bulk_string(INPUT.as_bytes());
+        assert_eq!(result.unwrap(), Resp::BulkString(EXPECT.to_owned()))
     }
 }

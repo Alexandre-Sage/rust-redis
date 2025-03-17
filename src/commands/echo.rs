@@ -25,7 +25,6 @@ impl CommandHandler for EchoCommand {
         &self,
         args: &[crate::resp::Resp],
     ) -> Result<crate::resp::Resp, RustRedisError> {
-        dbg!(&args);
         if args.len() > 1 {
             return Err(RustRedisError::InvalidArgLength(
                 ECHO_COMMAND_NAME.to_owned(),

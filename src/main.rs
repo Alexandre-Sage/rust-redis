@@ -1,10 +1,15 @@
 pub mod commands;
+mod config;
 mod data_management;
 pub mod errors;
 mod event_loop;
 pub mod helpers;
 mod resp;
 
+use std::sync::Arc;
+
+use clap::Parser;
+use config::AppConfig;
 use data_management::{
     datastore::DataStore, hash_table_store::HashTableDataStore, message::DataChannelMessage,
     worker::DataManager,
@@ -19,19 +24,21 @@ where
 {
     event_loop: EventLoop,
     data_manager: DataManager<T>,
+    config: Arc<AppConfig>,
 }
 
 impl<T> App<T>
 where
     T: DataStore,
 {
-    pub fn new(port: i32, host: String, data_store: Option<T>) -> Self {
+    pub fn new(port: i32, host: String, data_store: Option<T>, config: Arc<AppConfig>) -> Self {
         let (data_sender, data_receiver) = mpsc::channel::<DataChannelMessage>(1000);
-        let event_loop = EventLoop::new(port, host, data_sender.into());
+        let event_loop = EventLoop::new(port, host, data_sender.into(), &config);
         let data_manager = DataManager::new(data_receiver, data_store, None);
         Self {
             event_loop,
             data_manager,
+            config,
         }
     }
 
@@ -44,7 +51,8 @@ where
 #[tokio::main]
 async fn main() -> Result<(), RustRedisError> {
     env_logger::init();
-    let runner = App::<HashTableDataStore>::new(6379, "127.0.0.1".to_string(), None);
+    let config = AppConfig::try_parse().unwrap();
+    let runner = App::<HashTableDataStore>::new(6379, "127.0.0.1".to_string(), None, config.into());
     runner.run(None).await
 }
 #[cfg(test)]
@@ -60,13 +68,13 @@ mod test {
         net::TcpStream,
     };
 
-    async fn setup(data: Option<HashTableDataStore>) -> TcpStream {
+    async fn setup(data: Option<HashTableDataStore>, config: AppConfig) -> TcpStream {
         let host = "127.0.0.1".to_string();
         let port = 6379;
         let notif = Arc::new(Notify::new());
         let notif2 = notif.clone();
         tokio::spawn(async move {
-            let runner = App::new(port, host, data);
+            let runner = App::new(port, host, data, config.into());
             let _ = runner.run(Some(&notif2)).await;
         });
         notif.notified().await;
@@ -83,7 +91,7 @@ mod test {
     async fn should_reply_to_ping() {
         const INPUT: &str = "*1\r\n$4\r\nPING\r\n";
         const EXPECT: &str = "+PONG\r\n";
-        let mut stream = setup(None).await;
+        let mut stream = setup(None, AppConfig::default()).await;
         let buf = send_request(&mut stream, INPUT).await;
         assert_eq!(&buf, EXPECT.as_bytes())
     }
@@ -93,7 +101,7 @@ mod test {
         // *2\r\n$4\r\nPING\r\n$4\r\nPING\r\n
         const INPUT: &str = "*1\r\n$4\r\nPING\r\n*1\r\n$4\r\nPING\r\n";
         const EXPECT: &str = "+PONG";
-        let mut stream = setup(None).await;
+        let mut stream = setup(None, AppConfig::default()).await;
         let buf = send_request(&mut stream, INPUT).await;
         let binding = String::from_utf8_lossy(&buf);
         let binding = binding.trim_end();
@@ -109,7 +117,12 @@ mod test {
         const EXPECT: &str = "+PONG\r\n";
         const CLIENTS: usize = 6;
         tokio::spawn(async move {
-            let runner = App::<HashTableDataStore>::new(6379, "0.0.0.0".to_owned(), None);
+            let runner = App::<HashTableDataStore>::new(
+                6379,
+                "0.0.0.0".to_owned(),
+                None,
+                AppConfig::default().into(),
+            );
             let _ = runner.run(None).await;
         });
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -137,7 +150,7 @@ mod test {
     async fn should_handle_echo_command() {
         const EXPECT: &str = "$3\r\nhey\r\n";
         const INPUT: &str = "*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n";
-        let mut stream = setup(None).await;
+        let mut stream = setup(None, AppConfig::default()).await;
         let res = send_request(&mut stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();
         assert_eq!(res, EXPECT)
@@ -147,7 +160,7 @@ mod test {
     async fn should_reply_error_if_invalid_commands_parse() {
         const INPUT: &str = "\r\n$4\r\nECHO\r\n$3\r\nhey\r\n";
         const EXPECT: &str = "-ERR invalid resp prefix\r\n";
-        let mut stream = setup(None).await;
+        let mut stream = setup(None, AppConfig::default()).await;
         let res = send_request(&mut stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();
         assert_eq!(res, EXPECT)
@@ -157,7 +170,7 @@ mod test {
     async fn should_reply_ok_on_set_successfull() {
         const INPUT: &str = "*3\r\n$3\r\nSET\r\n$5\r\nhello\r\n$5\r\nworld\r\n";
         const EXPECT: &str = "+OK\r\n";
-        let mut stream = setup(None).await;
+        let mut stream = setup(None, AppConfig::default()).await;
         let res = send_request(&mut stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();
         assert_eq!(res, EXPECT)
@@ -172,7 +185,7 @@ mod test {
         let value = Resp::bulk_string_from_str("world").serialize().unwrap();
         let entry = DataStoreEntry::new(value, None);
         let default = [(key.clone(), entry)];
-        let mut stream = setup(Some(default.into())).await;
+        let mut stream = setup(Some(default.into()), AppConfig::default()).await;
 
         let res = send_request(&mut stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();
@@ -184,7 +197,7 @@ mod test {
     async fn shoudl_reply_null_bulk_string_if_no_data() {
         const INPUT: &str = "*2\r\n$3\r\nGET\r\n$5\r\nhello\r\n";
         const EXPECT: &str = "$-1\r\n";
-        let mut stream = setup(None).await;
+        let mut stream = setup(None, AppConfig::default()).await;
 
         let res = send_request(&mut stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();
@@ -197,7 +210,7 @@ mod test {
         const INPUT: &str =
             "*5\r\n$3\r\nSET\r\n$5\r\nhello\r\n$5\r\nworld\r\n$2\r\nPX\r\n$1\r\n1\r\n";
         const EXPECT: &str = "+OK\r\n";
-        let mut stream = setup(None).await;
+        let mut stream = setup(None, AppConfig::default()).await;
         let res = send_request(&mut stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();
         assert_eq!(res, EXPECT)
@@ -214,12 +227,42 @@ mod test {
         let entry = DataStoreEntry::new(value, Some(expiry));
         let default = [(key.clone(), entry)];
 
-        let mut stream = setup(Some(default.into())).await;
+        let mut stream = setup(Some(default.into()), AppConfig::default()).await;
         tokio::time::sleep(Duration::from_millis(2)).await;
 
         let res = send_request(&mut stream, INPUT).await;
         let res = std::str::from_utf8(&res).unwrap();
 
+        assert_eq!(res, EXPECT)
+    }
+    #[tokio::test]
+    async fn should_reply_dir_to_get_config() {
+        const EXPECT: &str = "*2\r\n$3\r\ndir\r\n$16\r\n/tmp/redis-files\r\n";
+        const INPUT: &str = "*2\r\n$10\r\nCONFIG GET\r\n$3\r\ndir\r\n";
+
+        let mut stream = setup(
+            None,
+            AppConfig::parse_from(["config", "--dir", "/tmp/redis-files"]),
+        )
+        .await;
+        let res = send_request(&mut stream, INPUT).await;
+        let res = std::str::from_utf8(&res).unwrap();
+        assert_eq!(res, EXPECT)
+    }
+
+    #[tokio::test]
+    async fn should_reply_dbfilename_to_get_config() {
+        const EXPECT: &str = "*2\r\n$10\r\ndbfilename\r\n$9\r\nredis.rdb\r\n";
+        const INPUT: &str = "*2\r\n$10\r\nCONFIG GET\r\n$10\r\ndbfilename\r\n";
+
+        let mut stream = setup(
+            None,
+            AppConfig::parse_from(["config", "--dbfilename", "redis.rdb"]),
+        )
+        .await;
+
+        let res = send_request(&mut stream, INPUT).await;
+        let res = std::str::from_utf8(&res).unwrap();
         assert_eq!(res, EXPECT)
     }
     //#[ignore = "not complete"]
