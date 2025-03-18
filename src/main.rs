@@ -14,7 +14,7 @@ use data_management::{
     datastore::DataStore, hash_table_store::HashTableDataStore, message::DataChannelMessage,
     worker::DataManager,
 };
-use errors::RustRedisError;
+use errors::AppError;
 use event_loop::EventLoop;
 use tokio::sync::{mpsc, Notify};
 
@@ -42,14 +42,14 @@ where
         }
     }
 
-    pub async fn run(self, notif: Option<&Notify>) -> Result<(), RustRedisError> {
+    pub async fn run(self, notif: Option<&Notify>) -> Result<(), AppError> {
         self.data_manager.run();
         self.event_loop.run(notif).await
     }
 }
 
 #[tokio::main]
-async fn main() -> Result<(), RustRedisError> {
+async fn main() -> Result<(), AppError> {
     env_logger::init();
     let config = AppConfig::try_parse().unwrap();
     let runner = App::<HashTableDataStore>::new(6379, "127.0.0.1".to_string(), None, config.into());

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::errors::RustRedisError;
+use crate::errors::AppError;
 
 use super::command_registry::CommandHandler;
 
@@ -21,12 +21,9 @@ impl EchoCommand {
 
 #[async_trait]
 impl CommandHandler for EchoCommand {
-    async fn handle(
-        &self,
-        args: &[crate::resp::Resp],
-    ) -> Result<crate::resp::Resp, RustRedisError> {
+    async fn handle(&self, args: &[crate::resp::Resp]) -> Result<crate::resp::Resp, AppError> {
         if args.len() > 1 {
-            return Err(RustRedisError::InvalidArgLength(
+            return Err(AppError::InvalidArgLength(
                 ECHO_COMMAND_NAME.to_owned(),
                 args.len().to_string(),
                 self.args.clone(),

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 
-use crate::{config::ConfigField, errors::RustRedisError, resp::Resp};
+use crate::{config::ConfigField, errors::AppError, resp::Resp};
 
 use super::command_registry::CommandHandler;
 
@@ -21,9 +21,9 @@ impl GetConfigCommandHandler {
 
 #[async_trait]
 impl CommandHandler for GetConfigCommandHandler {
-    async fn handle(&self, args: &[Resp]) -> Result<Resp, RustRedisError> {
+    async fn handle(&self, args: &[Resp]) -> Result<Resp, AppError> {
         if args.len() < 1 {
-            return Err(RustRedisError::InvalidArgLength(
+            return Err(AppError::InvalidArgLength(
                 GET_CONFIG_COMMAND_NAME.to_owned(),
                 "1".to_owned(),
                 args.len().to_string(),
@@ -75,7 +75,7 @@ mod tests {
         let result = handler.handle(&[arg]).await;
         assert_eq!(
             result.unwrap_err().to_string(),
-            RustRedisError::InvalidArgType("bulk string".to_owned()).to_string()
+            AppError::InvalidArgType("bulk string".to_owned()).to_string()
         )
     }
 
@@ -87,7 +87,7 @@ mod tests {
         let result = handler.handle(&[]).await;
         assert_eq!(
             result.unwrap_err().to_string(),
-            RustRedisError::InvalidArgLength(
+            AppError::InvalidArgLength(
                 GET_CONFIG_COMMAND_NAME.to_owned(),
                 "1".to_owned(),
                 "0".to_owned()

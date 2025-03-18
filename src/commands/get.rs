@@ -6,7 +6,7 @@ use tokio::sync::mpsc::Sender;
 
 use crate::{
     data_management::message::{DataChannelMessage, GetMessage, MessageChannelError},
-    errors::RustRedisError,
+    errors::AppError,
     resp::Resp,
 };
 
@@ -29,9 +29,9 @@ impl GetCommandHandler {
 
 #[async_trait]
 impl CommandHandler for GetCommandHandler {
-    async fn handle(&self, args: &[Resp]) -> Result<Resp, RustRedisError> {
+    async fn handle(&self, args: &[Resp]) -> Result<Resp, AppError> {
         if args.len() < 1 {
-            return Err(RustRedisError::InvalidArgLength(
+            return Err(AppError::InvalidArgLength(
                 GET_COMMAND_NAME.to_owned(),
                 "1".to_owned(),
                 args.len().to_string(),
@@ -56,7 +56,7 @@ mod test {
     use crate::{
         commands::{command_registry::CommandHandler, get::GET_COMMAND_NAME},
         data_management::message::{DataChannelMessage, ResponseChannelMessage},
-        errors::RustRedisError,
+        errors::AppError,
         resp::Resp,
     };
 
@@ -93,7 +93,7 @@ mod test {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
-            RustRedisError::InvalidArgLength(
+            AppError::InvalidArgLength(
                 GET_COMMAND_NAME.to_owned(),
                 "1".to_owned(),
                 "0".to_owned(),

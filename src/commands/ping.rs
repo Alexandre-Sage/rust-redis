@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::{errors::RustRedisError, resp::Resp};
+use crate::{errors::AppError, resp::Resp};
 
 use super::command_registry::CommandHandler;
 
@@ -9,10 +9,7 @@ pub struct PingCommand;
 
 #[async_trait]
 impl CommandHandler for PingCommand {
-    async fn handle(
-        &self,
-        _args: &[crate::resp::Resp],
-    ) -> Result<crate::resp::Resp, RustRedisError> {
+    async fn handle(&self, _args: &[crate::resp::Resp]) -> Result<crate::resp::Resp, AppError> {
         Ok(Resp::simple_string_from_str("PONG"))
     }
 }

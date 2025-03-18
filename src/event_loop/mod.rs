@@ -17,7 +17,7 @@ use crate::{
     },
     config::AppConfig,
     data_management::message::DataChannelMessage,
-    errors::RustRedisError,
+    errors::AppError,
     resp::Resp,
 };
 
@@ -63,7 +63,7 @@ impl EventLoop {
         format!("{}:{}", self.host, self.port)
     }
 
-    pub async fn run(&self, notify: Option<&Notify>) -> Result<(), RustRedisError> {
+    pub async fn run(&self, notify: Option<&Notify>) -> Result<(), AppError> {
         let addr = self.address();
         let listener = TcpListener::bind(&addr).await?;
 
@@ -160,7 +160,7 @@ impl EventLoop {
     }
 }
 
-pub fn parse_commands(input: &[u8]) -> Result<Vec<Resp>, RustRedisError> {
+pub fn parse_commands(input: &[u8]) -> Result<Vec<Resp>, AppError> {
     let mut parsed = 0;
     let mut commands = Vec::new();
     while parsed < input.len() {
@@ -171,6 +171,6 @@ pub fn parse_commands(input: &[u8]) -> Result<Vec<Resp>, RustRedisError> {
     Ok(commands)
 }
 
-pub fn command_as_str(input: &[u8]) -> Result<&str, RustRedisError> {
-    std::str::from_utf8(input).map_err(|err| RustRedisError::InvalidCommand(err.to_string()))
+pub fn command_as_str(input: &[u8]) -> Result<&str, AppError> {
+    std::str::from_utf8(input).map_err(|err| AppError::InvalidCommand(err.to_string()))
 }

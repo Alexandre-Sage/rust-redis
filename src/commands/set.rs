@@ -6,7 +6,7 @@ use tokio::sync::mpsc::Sender;
 
 use crate::{
     data_management::message::{DataChannelMessage, MessageChannelError, SetMessage},
-    errors::RustRedisError,
+    errors::AppError,
     resp::Resp,
 };
 
@@ -28,9 +28,9 @@ impl SetCommandHandler {
         }
     }
 
-    fn check_args_len(&self, args_len: usize) -> Result<(), RustRedisError> {
+    fn check_args_len(&self, args_len: usize) -> Result<(), AppError> {
         if args_len < 2 {
-            return Err(RustRedisError::InvalidArgLength(
+            return Err(AppError::InvalidArgLength(
                 SET_COMMAND_NAME.to_owned(),
                 args_len.to_string(),
                 self.args.to_owned(),
@@ -38,7 +38,7 @@ impl SetCommandHandler {
         }
 
         if args_len > 2 && args_len < 4 {
-            return Err(RustRedisError::InvalidArgLength(
+            return Err(AppError::InvalidArgLength(
                 format!("{SET_COMMAND_NAME} with EXPIRY"),
                 args_len.to_string(),
                 "4".to_owned(),
@@ -48,25 +48,25 @@ impl SetCommandHandler {
         Ok(())
     }
 
-    fn handle_args(&self, args: &[Resp]) -> Result<(Resp, Resp, Option<Duration>), RustRedisError> {
+    fn handle_args(&self, args: &[Resp]) -> Result<(Resp, Resp, Option<Duration>), AppError> {
         let key = args[0].to_owned();
         let value = args[1].to_owned();
 
         if !(key.is_bulk_string() && value.is_bulk_string()) {
-            return Err(RustRedisError::InvalidArgType("bulk string".to_owned()));
+            return Err(AppError::InvalidArgType("bulk string".to_owned()));
         }
 
         if args.len() > 2 {
             if let Resp::BulkString(px) = &args[2] {
                 if px != b"PX" {
-                    return Err(RustRedisError::InvalidArg(
+                    return Err(AppError::InvalidArg(
                         SET_COMMAND_NAME.to_owned(),
                         "PX".to_owned(),
                         String::from_utf8(px.to_vec()).unwrap(),
                     ));
                 }
             } else {
-                return Err(RustRedisError::InvalidArgType("bulk string".to_owned()));
+                return Err(AppError::InvalidArgType("bulk string".to_owned()));
             }
             if let Resp::BulkString(duration) = &args[3] {
                 let duration = std::str::from_utf8(&duration)?;
@@ -74,7 +74,7 @@ impl SetCommandHandler {
                 let duration = Duration::from_millis(duration);
                 return Ok((key, value, Some(duration)));
             } else {
-                return Err(RustRedisError::InvalidArgType("bulk string".to_owned()));
+                return Err(AppError::InvalidArgType("bulk string".to_owned()));
             };
         }
         Ok((key, value, None))
@@ -86,7 +86,7 @@ impl CommandHandler for SetCommandHandler {
     async fn handle(
         &self,
         args: &[crate::resp::Resp],
-    ) -> Result<crate::resp::Resp, crate::errors::RustRedisError> {
+    ) -> Result<crate::resp::Resp, crate::errors::AppError> {
         self.check_args_len(args.len())?;
 
         let (key, value, duration) = self.handle_args(args)?;
@@ -107,7 +107,7 @@ mod test {
     use crate::{
         commands::{command_registry::CommandHandler, set::SET_COMMAND_NAME},
         data_management::message::{DataChannelMessage, ResponseChannelMessage},
-        errors::RustRedisError,
+        errors::AppError,
         resp::Resp,
     };
 
@@ -147,7 +147,7 @@ mod test {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
-            RustRedisError::InvalidArgLength(
+            AppError::InvalidArgLength(
                 SET_COMMAND_NAME.to_owned(),
                 "1".to_owned(),
                 "2".to_owned(),
@@ -198,7 +198,7 @@ mod test {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
-            RustRedisError::InvalidArgLength(
+            AppError::InvalidArgLength(
                 format!("{SET_COMMAND_NAME} with EXPIRY"),
                 "3".to_string(),
                 "4".to_owned(),
@@ -223,7 +223,7 @@ mod test {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
-            RustRedisError::InvalidArg(
+            AppError::InvalidArg(
                 SET_COMMAND_NAME.to_owned(),
                 "PX".to_owned(),
                 "XYZ".to_owned()

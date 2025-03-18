@@ -7,7 +7,7 @@ use resp::{DeserializeError, SerializeError};
 use crate::{data_management::message::MessageChannelError, resp::Resp};
 
 #[derive(Debug, thiserror::Error)]
-pub enum RustRedisError {
+pub enum AppError {
     #[error("ERR invalid config field")]
     InvalidConfigField(String),
     #[error("ERR invalid command '{0}'")]
@@ -34,8 +34,8 @@ pub enum RustRedisError {
     InvalidUtf8(#[from] Utf8Error),
 }
 
-impl From<RustRedisError> for Resp {
-    fn from(value: RustRedisError) -> Self {
+impl From<AppError> for Resp {
+    fn from(value: AppError) -> Self {
         let binding = value.to_string();
         let error = binding.as_bytes();
         Resp::SimpleError(error.to_vec())

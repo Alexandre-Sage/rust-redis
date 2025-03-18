@@ -1,11 +1,8 @@
 use std::{sync::Arc, time::Duration};
 
-use tokio::{
-    sync::mpsc,
-    task::JoinHandle,
-};
+use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::{errors::RustRedisError, resp::Resp};
+use crate::{errors::AppError, resp::Resp};
 
 use super::{
     datastore::DataStore,
@@ -84,7 +81,7 @@ where
 
                         let response = match response {
                             Ok(data) => data,
-                            Err(err) => RustRedisError::from(err).into(),
+                            Err(err) => AppError::from(err).into(),
                         };
 
                         message

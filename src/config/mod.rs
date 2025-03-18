@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use clap::{command, Parser};
 
-use crate::{errors::RustRedisError, resp::Resp};
+use crate::{errors::AppError, resp::Resp};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum ConfigField {
@@ -11,18 +11,18 @@ pub enum ConfigField {
 }
 
 impl TryFrom<&Resp> for ConfigField {
-    type Error = RustRedisError;
+    type Error = AppError;
     fn try_from(value: &Resp) -> Result<Self, Self::Error> {
         if let Resp::BulkString(field) = value {
             match field.as_slice() {
                 b"dbfilename" => Ok(Self::Dbfilename),
                 b"dir" => Ok(Self::Dir),
-                _ => Err(RustRedisError::InvalidConfigField(
+                _ => Err(AppError::InvalidConfigField(
                     String::from_utf8_lossy(&field).to_string(),
                 )),
             }
         } else {
-            Err(RustRedisError::InvalidArgType("bulk string".to_owned()))
+            Err(AppError::InvalidArgType("bulk string".to_owned()))
         }
     }
 }

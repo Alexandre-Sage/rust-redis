@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use mockall::automock;
 
-use crate::{errors::RustRedisError, resp::Resp};
+use crate::{errors::AppError, resp::Resp};
 
 #[async_trait]
 #[automock]
 pub trait CommandHandler: std::fmt::Debug + Send + Sync {
-    async fn handle(&self, args: &[Resp]) -> Result<Resp, RustRedisError>;
+    async fn handle(&self, args: &[Resp]) -> Result<Resp, AppError>;
 }
 
 #[derive(Debug)]
@@ -26,22 +26,18 @@ impl CommandRegistry {
         self.registry.insert(arg.to_uppercase(), command_handler);
     }
 
-    pub fn command_handler(&self, arg: &str) -> Result<&Box<dyn CommandHandler>, RustRedisError> {
+    pub fn command_handler(&self, arg: &str) -> Result<&Box<dyn CommandHandler>, AppError> {
         self.registry
             .get(arg.to_uppercase().as_str())
-            .ok_or(RustRedisError::UnknownCommand(arg.to_owned()))
+            .ok_or(AppError::UnknownCommand(arg.to_owned()))
     }
 
-    pub async fn command_with_args(
-        &self,
-        command: &str,
-        args: &[Resp],
-    ) -> Result<Resp, RustRedisError> {
+    pub async fn command_with_args(&self, command: &str, args: &[Resp]) -> Result<Resp, AppError> {
         let handler = self.command_handler(command)?;
         handler.handle(args).await
     }
 
-    pub async fn no_args_command(&self, command: &str) -> Result<Resp, RustRedisError> {
+    pub async fn no_args_command(&self, command: &str) -> Result<Resp, AppError> {
         let handler = self.command_handler(command)?;
         handler.handle(&[]).await
     }
