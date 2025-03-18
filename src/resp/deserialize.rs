@@ -40,34 +40,29 @@ pub(super) fn deserialize_array(arr: &[u8]) -> Result<Resp, DeserializeError> {
     let arr_len = parse_resp_item_len(&arr[1..first_crlf])?;
     let mut buf = Vec::with_capacity(arr_len);
     let mut current_pos = first_crlf + crlf_len;
-    //let mut parsed_item = 0;
     while current_pos < arr.len() && buf.len() < arr_len {
         let current = &arr[current_pos..];
         match current[0] {
             BULK_STRING_PREFIX => {
                 let item_first_crlf_pos = find_crlf(current)?;
                 let item_len = parse_resp_item_len(&current[1..item_first_crlf_pos])?;
-                // TODO lenght du prefix
-                let prefix = item_len.to_string().len();
+                let header_len = item_len.to_string().len() + 1;
                 let item_len = item_len + (crlf_len * 2);
-                let item = &current[..item_len + prefix + 1];
+                let item = &current[..item_len + header_len];
                 let de_item = Resp::deserialize(item)?;
                 buf.push(de_item);
-                //parsed_item += 1;
                 current_pos += item.len();
             }
             SIMPLE_STRING_PREFIX => {
                 let item_crlf_pos = find_crlf(current)?;
                 let item = &current[..item_crlf_pos + crlf_len];
                 buf.push(Resp::deserialize(item)?);
-                //parsed_item += 1;
                 current_pos += item.len();
             }
             ARRAY_PREFIX => {
                 let item = Resp::deserialize(current)?;
                 current_pos += item.size();
                 buf.push(item);
-                //parsed_item += 1;
             }
             _any => {
                 todo!()
