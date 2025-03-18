@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use tokio::{
-    sync::{mpsc, Mutex},
+    sync::mpsc,
     task::JoinHandle,
 };
 

@@ -1,4 +1,4 @@
-use std::{fmt::format, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use futures::TryFutureExt;

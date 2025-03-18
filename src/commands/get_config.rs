@@ -1,12 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use async_trait::async_trait;
 
-use crate::{
-    config::{AppConfig, ConfigField},
-    errors::RustRedisError,
-    resp::Resp,
-};
+use crate::{config::ConfigField, errors::RustRedisError, resp::Resp};
 
 use super::command_registry::CommandHandler;
 
@@ -46,6 +42,8 @@ impl CommandHandler for GetConfigCommandHandler {
 mod tests {
 
     use clap::Parser;
+
+    use crate::config::AppConfig;
 
     use super::*;
 
